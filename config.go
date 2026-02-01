@@ -8,11 +8,8 @@ import (
 	_ "github.com/boeboe/iec61850/libiec61850/inc/goose"
 	_ "github.com/boeboe/iec61850/libiec61850/inc/hal/inc"
 	_ "github.com/boeboe/iec61850/libiec61850/inc/iec61850/inc"
-	_ "github.com/boeboe/iec61850/libiec61850/inc/iec61850/inc_private"
 	_ "github.com/boeboe/iec61850/libiec61850/inc/logging"
-	_ "github.com/boeboe/iec61850/libiec61850/inc/mms/inc"
-	_ "github.com/boeboe/iec61850/libiec61850/inc/mms/inc_private"
-	_ "github.com/boeboe/iec61850/libiec61850/inc/mms/iso_mms/asn1c"
+	_ "github.com/boeboe/iec61850/libiec61850/inc/mms"
 	_ "github.com/boeboe/iec61850/libiec61850/inc/sampled_values"
 
 	_ "github.com/boeboe/iec61850/libiec61850/lib/linux64"

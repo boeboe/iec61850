@@ -3,9 +3,10 @@ package iec61850
 // #include <iec61850_client.h>
 // #include <mms_value.h>
 // #include <stdlib.h>
+// #include <stdint.h>
 //
 // extern bool goFileHandlerCallback(void* parameter, uint8_t* buffer, uint32_t bytesRead);
-// extern void callGetFile(IedConnection conn, IedClientError* error, const char* fileName, void* handlerParam);
+// extern void callGetFile(IedConnection conn, IedClientError* error, const char* fileName, uintptr_t handlerParam);
 import "C"
 import (
 	"sync"
@@ -541,8 +542,8 @@ func (c *Client) GetFile(fileName string) ([]byte, error) {
 	handlerID := registerFileHandler(ctx)
 	defer unregisterFileHandler(handlerID)
 
-	// Call C wrapper function with callback
-	C.callGetFile(c.conn, &clientError, cFileName, unsafe.Pointer(handlerID))
+	// Call C wrapper function with callback (pass uintptr directly)
+	C.callGetFile(c.conn, &clientError, cFileName, C.uintptr_t(handlerID))
 
 	if err := GetIedClientError(clientError); err != nil {
 		return nil, err

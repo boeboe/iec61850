@@ -9,6 +9,15 @@ English | [中文](README_zh_CN.md)
 
 cgo version of IEC 61850 library, reference [libiec61850](https://github.com/mz-automation/libiec61850)
 
+## Version Requirements
+
+**This project requires libiec61850 v1.6.1** with the following features enabled:
+- ✅ R-GOOSE (Routable GOOSE over UDP/IP)
+- ✅ R-SMV (Routable Sampled Values over UDP/IP)
+- ✅ SNTP Client (Network time synchronization)
+
+See [COMPATIBILITY.md](COMPATIBILITY.md) for feature coverage and build instructions.
+
 ## Overview
 
 iec61850 is an open source (GPL-3.0 license) implementation of the IEC 61850 client and server library that implements the MMS, GOOSE and SV protocols.
@@ -23,6 +32,7 @@ The library support the following IEC 61850 protocol features:
 - Sampled Values (SV - IEC 61850-9-2)
 - Support for buffered and unbuffered reports
 - Online report control block configuration
+- GOOSE control block client operations (read/write GoCB configuration)
 - Data access service (get data, set data)
 - Online data model discovery and browsing
 - All data set services (get values, set values, browse)
@@ -49,6 +59,32 @@ go get -u github.com/boeboe/iec61850
 - [Server handle control](test/server/simpleIO_control_test.go)
 - [Server handle direct control](test/server/simpleIO_direct_control_goose_test.go)
 - [Create tls server](test/tls_server/tls_server_test.go)
+
+## Building libiec61850 v1.6.1
+
+Before using this library, you must build libiec61850 v1.6.1 with advanced features enabled:
+
+### Prerequisites
+- mbedtls (required for R-GOOSE and R-SMV):
+  ```bash
+  # macOS
+  brew install mbedtls
+  
+  # Ubuntu/Debian
+  sudo apt-get install libmbedtls-dev
+  ```
+
+### Build Libraries
+```bash
+# Automated build script
+./scripts/rebuild_libraries.sh
+```
+
+### Verify Installation
+```bash
+go test -v -run TestLibraryVersion
+# Expected: Using libiec61850 version: 1.6.1 (with R-GOOSE, R-SMV, SNTP enabled)
+```
 
 
 ## License

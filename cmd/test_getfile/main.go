@@ -3,7 +3,9 @@ package main
 import (
 	"fmt"
 	"log"
+	"net"
 	"os"
+	"strconv"
 
 	"github.com/boeboe/iec61850"
 )
@@ -19,9 +21,15 @@ func main() {
 	filename := os.Args[2]
 
 	// Parse host and port
-	host := "localhost"
-	port := 102
-	fmt.Sscanf(hostPort, "%s:%d", &host, &port)
+	host, portStr, err := net.SplitHostPort(hostPort)
+	if err != nil {
+		log.Fatalf("Invalid host:port format '%s': %v", hostPort, err)
+	}
+
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		log.Fatalf("Invalid port number '%s': %v", portStr, err)
+	}
 
 	settings := iec61850.Settings{
 		Host:           host,

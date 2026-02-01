@@ -1,1 +1,3 @@
-package inc_61850
+package inc
+
+// Package inc provides CGo access to libiec61850 IEC 61850 include files
