@@ -16,7 +16,7 @@ cgo version of IEC 61850 library, reference [libiec61850](https://github.com/mz-
 - ✅ R-SMV (Routable Sampled Values over UDP/IP)
 - ✅ SNTP Client (Network time synchronization)
 
-See [REBUILD_LIBRARIES.md](REBUILD_LIBRARIES.md) for build instructions and [COMPATIBILITY.md](COMPATIBILITY.md) for feature coverage.
+See [COMPATIBILITY.md](COMPATIBILITY.md) for feature coverage and build instructions.
 
 ## Overview
 
@@ -32,6 +32,7 @@ The library support the following IEC 61850 protocol features:
 - Sampled Values (SV - IEC 61850-9-2)
 - Support for buffered and unbuffered reports
 - Online report control block configuration
+- GOOSE control block client operations (read/write GoCB configuration)
 - Data access service (get data, set data)
 - Online data model discovery and browsing
 - All data set services (get values, set values, browse)
@@ -75,10 +76,8 @@ Before using this library, you must build libiec61850 v1.6.1 with advanced featu
 
 ### Build Libraries
 ```bash
-# Automated build script (recommended)
+# Automated build script
 ./scripts/rebuild_libraries.sh
-
-# Or manual build - see REBUILD_LIBRARIES.md for detailed instructions
 ```
 
 ### Verify Installation
@@ -86,8 +85,6 @@ Before using this library, you must build libiec61850 v1.6.1 with advanced featu
 go test -v -run TestLibraryVersion
 # Expected: Using libiec61850 version: 1.6.1 (with R-GOOSE, R-SMV, SNTP enabled)
 ```
-
-For detailed build instructions, cross-compilation, and platform-specific guides, see [REBUILD_LIBRARIES.md](REBUILD_LIBRARIES.md).
 
 
 ## License

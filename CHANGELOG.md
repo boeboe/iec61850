@@ -19,16 +19,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **R-GOOSE** (Routable GOOSE over UDP/IP) support - enabled by default
 - **R-SMV** (Routable Sampled Values over UDP/IP) support - enabled by default
 - **SNTP Client** (Network time synchronization) - enabled by default
+- **ClientGooseControlBlock wrapper** - Complete client-side GOOSE control block management
+  - `GetGoCBValues()` - Read GOOSE control block configuration from server
+  - `SetGoCBValues()` - Write GOOSE control block parameters with selective updates
+  - `PhyComAddress` type for Ethernet/VLAN addressing (MAC, VLAN priority/ID, AppID)
+  - GoCB element mask constants for selective parameter updates
+- **macOS Intel (x86_64)** platform support with dedicated build configuration
 - IEC 61850 Edition 2.1 support via `Edition21` constant in `server_config.go`
 - `GetLibraryVersion()` function for runtime version checking
 - `version_test.go` for version verification
 - Automated rebuild script (`scripts/rebuild_libraries.sh`) with feature auto-configuration
-- Comprehensive documentation:
-  - `COMPATIBILITY.md` - Feature coverage matrix
-  - `REBUILD_LIBRARIES.md` - Library build instructions
-  - `UPGRADE_TO_1.6.1.md` - Quick migration guide
-  - `RELEASE_PROCESS.md` - Release workflow
+- Comprehensive documentation in `COMPATIBILITY.md` - Feature coverage matrix
 - Edition constants (`Edition1`, `Edition2`, `Edition21`) for type-safe configuration
+- GitHub Actions workflow for automated multi-platform library builds
 
 ### Changed
 
@@ -42,7 +45,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- CGo include paths for all platforms (Linux x64/ARMv7l/ARMv8, macOS ARM64, Windows x64)
+- **Windows x64 build issues** - Multiple fixes for MinGW linking and CGo configuration
+  - Removed `-D__USE_MINGW_ANSI_STDIO=1` flag causing import stub conflicts
+  - Added mbedtls platform-specific flags (`-DMBEDTLS_PLATFORM_SNPRINTF_ALT`, `-DMBEDTLS_PLATFORM_VSNPRINTF_ALT`)
+  - Forced CGO to use MinGW gcc toolchain with explicit environment variables
+  - Fixed shell environment (PowerShell vs MSYS2) for Go builds
+- **macOS Intel (x86_64) build configuration** - Removed invalid `-Wl,-all_load` linker flags
+- **test_getfile utility** - Corrected host:port parsing using `net.SplitHostPort` instead of `fmt.Sscanf`
+- CGo include paths for all platforms (Linux x64/ARMv7l/ARMv8, macOS ARM64/Intel, Windows x64)
 - Go package imports for header directories after rsync synchronization
 - Duplicate package declarations in version-related files
 - MMS header path references in all build configurations
@@ -56,9 +66,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Migration Guide
 
-See [UPGRADE_TO_1.6.1.md](UPGRADE_TO_1.6.1.md) for detailed migration instructions from v1.0.13.
-
-Key migration steps:
+Key migration steps from v1.0.13:
 1. Update `go.mod`: `require github.com/boeboe/iec61850 v2.0.0`
 2. Run `go mod tidy`
 3. Rebuild your project: `go build`
@@ -79,8 +87,9 @@ Key migration steps:
 - Setting Groups
 - SCL/ICD file parsing
 - Static model generation from SCL
-- Config file model loading (.cfg files)
-
+- Config file model loading  M1/M2)
+- macOS Intel x64
+- Windows x64 (MinGW)
 ### Platform Support
 
 - Linux x86_64

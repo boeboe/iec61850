@@ -13,9 +13,6 @@ on:
       - master
       - main
       - v2.0.0
-    paths:
-      - '.github/workflows/build-libraries.yml'
-      - 'scripts/rebuild_libraries.sh'
 
 env:
   LIBIEC61850_VERSION: v1.6.1
@@ -320,7 +317,7 @@ jobs:
 
   build-macos-arm64:
     name: Build macOS ARM64
-    runs-on: macos-14  # M1 runner
+    runs-on: macos-15  # M1 runner
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -426,6 +423,116 @@ jobs:
         with:
           name: libiec61850-darwin-arm64
           path: libiec61850/lib/darwin_armv8/*.a
+          retention-days: 30
+
+  build-macos-amd64:
+    name: Build macOS x64
+    runs-on: macos-15-intel  # Intel runner
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          brew install cmake
+
+      - name: Install mbedtls 2.28 from source
+        run: |
+          # Build mbedtls 2.28 for macOS (compatible with libiec61850 v1.6.1)
+          git clone --depth 1 --branch v2.28.8 https://github.com/Mbed-TLS/mbedtls.git /tmp/mbedtls
+          cd /tmp/mbedtls
+          mkdir build && cd build
+          cmake -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+                -DCMAKE_OSX_ARCHITECTURES=x86_64 \
+                -DENABLE_PROGRAMS=OFF \
+                -DENABLE_TESTING=OFF \
+                ..
+          make -j$(sysctl -n hw.ncpu)
+
+      - name: Clone libiec61850
+        run: |
+          git clone --depth 1 --branch ${{ env.LIBIEC61850_VERSION }} \
+            https://github.com/mz-automation/libiec61850.git /tmp/libiec61850
+
+      - name: Enable advanced features
+        run: |
+          cd /tmp/libiec61850
+          sed -i '' 's/#define CONFIG_IEC61850_R_GOOSE 0/#define CONFIG_IEC61850_R_GOOSE 1/' config/stack_config.h
+          sed -i '' 's/#define CONFIG_IEC61850_R_SMV 0/#define CONFIG_IEC61850_R_SMV 1/' config/stack_config.h
+          sed -i '' 's/#define CONFIG_IEC61850_SNTP_CLIENT 0/#define CONFIG_IEC61850_SNTP_CLIENT 1/' config/stack_config.h
+          sed -i '' 's/#define CONFIG_MMS_SUPPORT_TLS 0/#define CONFIG_MMS_SUPPORT_TLS 1/' config/stack_config.h
+
+      - name: Debug - Verify mbedtls libraries
+        run: |
+          echo "=== mbedtls libraries ==="
+          ls -lh /tmp/mbedtls/build/library/
+          echo ""
+          echo "=== Checking for symbols in libmbedtls.a ==="
+          nm /tmp/mbedtls/build/library/libmbedtls.a | grep -i "mbedtls_ssl_config_init" || echo "Symbol not found!"
+
+      - name: Build library
+        run: |
+          cd /tmp/libiec61850
+          mkdir build && cd build
+          cmake -DCMAKE_BUILD_TYPE=Release \
+                -DWITH_MBEDTLS=1 \
+                -DCONFIG_EXTERNAL_MBEDTLS_INCLUDE_PATH=/tmp/mbedtls/include \
+                -DCMAKE_OSX_ARCHITECTURES=x86_64 \
+                -DMBEDTLS_INCLUDE_DIR=/tmp/mbedtls/include \
+                -DMBEDTLS_LIBRARY=/tmp/mbedtls/build/library/libmbedtls.a \
+                -DMBEDX509_LIBRARY=/tmp/mbedtls/build/library/libmbedx509.a \
+                -DMBEDCRYPTO_LIBRARY=/tmp/mbedtls/build/library/libmbedcrypto.a \
+                -DBUILD_EXAMPLES=OFF \
+                -DBUILD_PYTHON_BINDINGS=OFF \
+                ..
+          # Build only static libraries (hal and iec61850 targets)
+          make -j$(sysctl -n hw.ncpu) hal iec61850
+
+      - name: Copy library to workspace
+        run: |
+          mkdir -p libiec61850/lib/darwin_amd64
+          cp /tmp/libiec61850/build/src/libiec61850.a libiec61850/lib/darwin_amd64/
+          cp /tmp/libiec61850/build/hal/libhal.a libiec61850/lib/darwin_amd64/
+          cp /tmp/mbedtls/build/library/libmbedtls.a libiec61850/lib/darwin_amd64/
+          cp /tmp/mbedtls/build/library/libmbedx509.a libiec61850/lib/darwin_amd64/
+          cp /tmp/mbedtls/build/library/libmbedcrypto.a libiec61850/lib/darwin_amd64/
+
+      - name: Verify library
+        run: |
+          file libiec61850/lib/darwin_amd64/libiec61850.a
+          ls -lh libiec61850/lib/darwin_amd64/libiec61850.a
+          lipo -info libiec61850/lib/darwin_amd64/libiec61850.a
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Debug - Check libraries and symbols
+        run: |
+          echo "=== Library files ==="
+          ls -lh libiec61850/lib/darwin_amd64/
+          echo ""
+          echo "=== Check for TLS symbols in libiec61850.a ==="
+          nm libiec61850/lib/darwin_amd64/libiec61850.a | grep -i tls || echo "No TLS symbols found!"
+          echo ""
+          echo "=== Check config_darwin_amd64.go LDFLAGS ==="
+          grep -A 10 'LDFLAGS' config_darwin_amd64.go || echo "config_darwin_amd64.go not found - will use fallback config"
+          echo ""
+          echo "=== CMake cache for TLS/MBEDTLS ==="
+          grep -i 'mbedtls\|tls' /tmp/libiec61850/build/CMakeCache.txt || echo "No mbedtls entries in CMakeCache"
+
+      - name: Test Go build
+        run: |
+          go build -v ./...
+          echo "Go build successful for darwin_amd64!"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: libiec61850-darwin-x64
+          path: libiec61850/lib/darwin_amd64/*.a
           retention-days: 30
 
   build-windows-amd64:
@@ -593,7 +700,7 @@ jobs:
 
   verify-and-commit:
     name: Verify and Commit Libraries
-    needs: [build-linux-amd64, build-linux-armv7l, build-linux-armv8, build-macos-arm64, build-windows-amd64]
+    needs: [build-linux-amd64, build-linux-armv7l, build-linux-armv8, build-macos-arm64, build-macos-amd64, build-windows-amd64]
     runs-on: ubuntu-latest
     if: github.event.inputs.commit_libraries == 'true' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
     steps:
@@ -611,12 +718,14 @@ jobs:
           mkdir -p libiec61850/lib/linux_armv7l
           mkdir -p libiec61850/lib/linux_armv8
           mkdir -p libiec61850/lib/darwin_armv8
+          mkdir -p libiec61850/lib/darwin_amd64
           mkdir -p libiec61850/lib/win64
           
           cp artifacts/libiec61850-linux64/*.a libiec61850/lib/linux64/
           cp artifacts/libiec61850-linux-armv7l/*.a libiec61850/lib/linux_armv7l/
           cp artifacts/libiec61850-linux-armv8/*.a libiec61850/lib/linux_armv8/
           cp artifacts/libiec61850-darwin-arm64/*.a libiec61850/lib/darwin_armv8/
+          cp artifacts/libiec61850-darwin-x64/*.a libiec61850/lib/darwin_amd64/
           cp artifacts/libiec61850-windows-x64/*.a libiec61850/lib/win64/
 
       - name: Setup Go
@@ -659,6 +768,7 @@ jobs:
                        -m "- Linux ARMv7l" \
                        -m "- Linux ARMv8 (ARM64)" \
                        -m "- macOS ARM64" \
+                       -m "- macOS x64" \
                        -m "- Windows x64" \
                        -m "" \
                        -m "Auto-built by GitHub Actions"
@@ -677,6 +787,7 @@ jobs:
           echo "| Linux ARMv7l | $(du -h libiec61850/lib/linux_armv7l/libiec61850.a | cut -f1) | ✅ |" >> $GITHUB_STEP_SUMMARY
           echo "| Linux ARMv8 | $(du -h libiec61850/lib/linux_armv8/libiec61850.a | cut -f1) | ✅ |" >> $GITHUB_STEP_SUMMARY
           echo "| macOS ARM64 | $(du -h libiec61850/lib/darwin_armv8/libiec61850.a | cut -f1) | ✅ |" >> $GITHUB_STEP_SUMMARY
+          echo "| macOS x64 | $(du -h libiec61850/lib/darwin_amd64/libiec61850.a | cut -f1) | ✅ |" >> $GITHUB_STEP_SUMMARY
           echo "| Windows x64 | $(du -h libiec61850/lib/win64/libiec61850.a | cut -f1) | ✅ |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## Configuration" >> $GITHUB_STEP_SUMMARY

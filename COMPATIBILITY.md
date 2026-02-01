@@ -14,7 +14,7 @@ This document describes the compatibility between the official libiec61850 C lib
 - ✅ R-SMV (Routable Sampled Values over UDP/IP)
 - ✅ SNTP Client (Network time synchronization)
 
-To build the required libraries, run `./scripts/rebuild_libraries.sh` (see [REBUILD_LIBRARIES.md](REBUILD_LIBRARIES.md)).
+To build the required libraries, run `./scripts/rebuild_libraries.sh`.
 
 To check the runtime version:
 ```go
@@ -45,7 +45,7 @@ fmt.Printf("Using libiec61850 version: %s\n", version)
 |---------|-----------|-------------|-------|
 | **GOOSE Publisher (L2)** | ✅ | ✅ | Ethernet Layer 2 GOOSE |
 | **GOOSE Subscriber (L2)** | ✅ | ✅ | Platform-specific (Linux AMD64) |
-| **GOOSE Control Block (Client)** | ✅ | ❌ | Missing ClientGooseControlBlock wrapper |
+| **GOOSE Control Block (Client)** | ✅ | ✅ | Read/Write GoCB via GetGoCBValues/SetGoCBValues |
 | **R-GOOSE (Routable)** | ✅ | ✅ | Enabled by default (requires mbedtls) |
 
 ### R-GOOSE Support
@@ -131,25 +131,22 @@ func NewSNTPClient() *SNTPClient {
 | Linux | ARMv7l | ✅ | libiec61850/lib/linux_armv7l/ |
 | Linux | ARMv8 (ARM64) | ✅ | libiec61850/lib/linux_armv8/ |
 | macOS | ARM64 (M1/M2) | ✅ | libiec61850/lib/darwin_armv8/ |
-| Windows | x86_64 | ✅ | libiec61850/lib/win64/ |
+| macOS | Intel x64 | ✅ | libiec61850/lib/darwin_amd64/ |
+| Windows | x86_64 (MinGW) | ✅ | libiec61850/lib/win64/ |
 
 ## Known Limitations
 
 ### Missing Go Bindings (C library supports, but not wrapped)
 
-1. **GOOSE Control Block Client API**:
-   - `IedConnection_getGoCBValues()` - Read GOOSE control block
-   - `IedConnection_setGoCBValues()` - Write GOOSE control block
-   - `ClientGooseControlBlock_*` functions
-
-2. **Async GOOSE Control**:
+1. **Async GOOSE Control**:
    - `IedConnection_getGoCBValuesAsync()` with callback handlers
+   - `IedConnection_setGoCBValuesAsync()` with callback handlers
 
-3. **Log Service**:
+2. **Log Service**:
    - `IedConnection_queryLogAfter()`
    - `IedConnection_queryLogByTime()`
 
-4. **Advanced MMS Services**:
+3. **Advanced MMS Services**:
    - Journal/Log reading APIs
    - Some MMS type introspection functions
 
@@ -165,7 +162,7 @@ These are configured in `stack_config.h` during library rebuild.
 
 ## Rebuilding Precompiled Libraries
 
-If you need to enable disabled features or update to a newer libiec61850 version, follow the rebuild guide in [REBUILD_LIBRARIES.md](REBUILD_LIBRARIES.md).
+If you need to enable disabled features or update to a newer libiec61850 version:
 
 Quick rebuild workflow:
 ```bash
