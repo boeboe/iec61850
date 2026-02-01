@@ -5,8 +5,15 @@ import "C"
 import "unsafe"
 
 // ServerConfig Configuration object to configure IEC 61850 stack features
+// IEC 61850 Edition constants
+const (
+	Edition1  uint8 = 0 // IEC 61850 Edition 1
+	Edition2  uint8 = 1 // IEC 61850 Edition 2
+	Edition21 uint8 = 2 // IEC 61850 Edition 2.1
+)
+
 type ServerConfig struct {
-	Edition                        uint8  // IEC 61850 edition (0 = edition 1, 1 = edition 2, 2 = edition 2.1, ...)
+	Edition                        uint8  // IEC 61850 edition (use Edition1, Edition2, or Edition21 constants)
 	ReportBufferSize               int    // size of the report buffer associated with a buffered report control block
 	ReportBufferSizeForURCBs       int    // size of the report buffer associated with an unbuffered report control block
 	MaxConnections                 int    // maximum number of MMS (TCP) connections
@@ -34,7 +41,7 @@ type ReportSetting struct {
 // NewServerConfig creates a new ServerConfig object with default values
 func NewServerConfig() ServerConfig {
 	return ServerConfig{
-		Edition:                        1,
+		Edition:                        Edition2,
 		ReportBufferSize:               65536,
 		ReportBufferSizeForURCBs:       65536,
 		MaxConnections:                 5,
