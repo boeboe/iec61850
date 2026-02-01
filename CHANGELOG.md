@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.0.0] - 2026-02-01
+## [1.1.0] - 2026-02-01
 
 ### Breaking Changes
 
@@ -67,7 +67,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Migration Guide
 
 Key migration steps from v1.0.13:
-1. Update `go.mod`: `require github.com/boeboe/iec61850 v2.0.0`
+1. Update `go.mod`: `require github.com/boeboe/iec61850 v1.1.0`
 2. Run `go mod tidy`
 3. Rebuild your project: `go build`
 4. No code changes required (API compatible)
@@ -125,5 +125,5 @@ This project follows [Semantic Versioning](https://semver.org/):
 - [Releases](https://github.com/boeboe/iec61850/releases)
 - [libiec61850 Upstream](https://github.com/mz-automation/libiec61850)
 
-[2.0.0]: https://github.com/boeboe/iec61850/releases/tag/v2.0.0
+[1.1.0]: https://github.com/boeboe/iec61850/releases/tag/v1.1.0
 [1.0.13]: https://github.com/boeboe/iec61850/releases/tag/v1.0.13
