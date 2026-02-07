@@ -7,11 +7,81 @@ import (
 	"unsafe"
 )
 
+// ClientConnection represents a client connection to the server. Use from connection indication or access handlers.
+type ClientConnection struct {
+	c C.ClientConnection
+}
+
+// PeerAddress returns the client peer address. Valid only while the connection exists.
+func (c *ClientConnection) PeerAddress() string {
+	if c == nil || c.c == nil {
+		return ""
+	}
+	s := C.ClientConnection_getPeerAddress(c.c)
+	if s == nil {
+		return ""
+	}
+	return C.GoString(s)
+}
+
+// LocalAddress returns the local server address. Valid only while the connection exists.
+func (c *ClientConnection) LocalAddress() string {
+	if c == nil || c.c == nil {
+		return ""
+	}
+	s := C.ClientConnection_getLocalAddress(c.c)
+	if s == nil {
+		return ""
+	}
+	return C.GoString(s)
+}
+
+// SecurityToken returns the security token set by the authenticator, or nil.
+func (c *ClientConnection) SecurityToken() unsafe.Pointer {
+	if c == nil || c.c == nil {
+		return nil
+	}
+	return C.ClientConnection_getSecurityToken(c.c)
+}
+
+// Abort closes the client connection. The connection must not be used after calling Abort.
+func (c *ClientConnection) Abort() bool {
+	if c == nil || c.c == nil {
+		return false
+	}
+	return bool(C.ClientConnection_abort(c.c))
+}
+
+// ClaimOwnership claims the connection for use outside the callback; call Release when done.
+func (c *ClientConnection) ClaimOwnership() *ClientConnection {
+	if c == nil || c.c == nil {
+		return nil
+	}
+	claimed := C.ClientConnection_claimOwnership(c.c)
+	if claimed == nil {
+		return nil
+	}
+	return &ClientConnection{c: claimed}
+}
+
+// Release releases ownership claimed with ClaimOwnership.
+func (c *ClientConnection) Release() {
+	if c == nil || c.c == nil {
+		return
+	}
+	C.ClientConnection_release(c.c)
+}
+
+// ConnectionIndicationHandler is called when a client connects or disconnects.
+type ConnectionIndicationHandler func(connection *ClientConnection, connected bool)
+
 type IedServer struct {
-	server              C.IedServer
-	serverConfig        ServerConfig
-	tlsConfig           C.TLSConfiguration
-	clientAuthenticator ClientAuthenticator
+	server                      C.IedServer
+	serverConfig                ServerConfig
+	tlsConfig                   C.TLSConfiguration
+	clientAuthenticator         ClientAuthenticator
+	connectionIndicationHandler ConnectionIndicationHandler
+	filestoreBasepath           string // last set via SetFilestoreBasepath; C API has no getter
 }
 
 func NewServerWithTlsSupport(serverConfig ServerConfig, tlsConfig *TLSConfig, iedModel *IedModel) (*IedServer, error) {
@@ -49,6 +119,32 @@ func NewServer(iedModel *IedModel) *IedServer {
 func (is *IedServer) Start(port int) {
 	C.IedServer_start(is.server, C.int(port))
 	// If there's another way to detect the error, handle it here.
+}
+
+// StartThreadless starts the server in non-threaded mode; call ProcessIncomingData and optionally WaitReady periodically.
+func (is *IedServer) StartThreadless(port int) {
+	C.IedServer_startThreadless(is.server, C.int(port))
+}
+
+// StopThreadless stops the server when running in threadless mode.
+func (is *IedServer) StopThreadless() {
+	C.IedServer_stopThreadless(is.server)
+}
+
+// WaitReady waits until a connection has data or the timeout expires. For use with StartThreadless.
+// Returns non-zero if at least one connection is ready (then call ProcessIncomingData).
+func (is *IedServer) WaitReady(timeoutMs uint) int {
+	return int(C.IedServer_waitReady(is.server, C.uint(timeoutMs)))
+}
+
+// ProcessIncomingData processes incoming TCP data. Call periodically when using StartThreadless.
+func (is *IedServer) ProcessIncomingData() {
+	C.IedServer_processIncomingData(is.server)
+}
+
+// PerformPeriodicTasks runs periodic background tasks (e.g. report timeouts). Call when using StartThreadless.
+func (is *IedServer) PerformPeriodicTasks() {
+	C.IedServer_performPeriodicTasks(is.server)
 }
 
 // IsRunning checks if the IedServer is currently running.

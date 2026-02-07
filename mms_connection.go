@@ -11,6 +11,12 @@ package iec61850
 extern void mmsConnectionStateChangedBridge(MmsConnection connection, void* parameter, MmsConnectionState newState);
 extern void readVariableAsyncBridge(uint32_t invokeId, void* parameter, MmsError mmsError, MmsValue* value);
 extern void writeVariableAsyncBridge(uint32_t invokeId, void* parameter, MmsError mmsError, MmsDataAccessError accessError);
+extern void rawMessageHandlerBridge(void* parameter, uint8_t* message, int messageLength, _Bool received);
+extern void fileDirectoryAsyncBridge(uint32_t invokeId, void* parameter, MmsError mmsError, char* filename, uint32_t size, uint64_t lastModified, _Bool moreFollows);
+extern void genericServiceAsyncBridge(uint32_t invokeId, void* parameter, MmsError mmsError, _Bool success);
+extern void readNVLDirectoryAsyncBridge(uint32_t invokeId, void* parameter, MmsError mmsError, LinkedList specs, _Bool deletable);
+extern void getVariableAccessAttributesAsyncBridge(uint32_t invokeId, void* parameter, MmsError mmsError, MmsVariableSpecification* spec);
+extern void identifyAsyncBridge(uint32_t invokeId, void* parameter, MmsError mmsError, char* vendorName, char* modelName, char* revision);
 
 static void destroyMmsValueLinkedListLocal(LinkedList L) {
 	if (L) LinkedList_destroyDeep(L, (LinkedListValueDeleteFunction)MmsValue_delete);
@@ -43,6 +49,27 @@ type MmsConnection struct {
 	c      C.MmsConnection
 	connMu sync.Mutex
 }
+
+// rawMessageCtx holds the Go callback for raw message handling; stored in rawMessageRegistry.
+type rawMessageCtx struct {
+	callback func(message []byte, received bool)
+}
+
+var (
+	rawMessageRegistry   = make(map[C.MmsConnection]*rawMessageCtx)
+	rawMessageRegistryMu sync.Mutex
+)
+
+// fileDirAsyncCtx holds state for an in-flight FileDirectoryAsync; keyed by connection in fileDirAsyncRegistry.
+type fileDirAsyncCtx struct {
+	entries  []MmsFileDirectoryEntryEx
+	callback func(entries []MmsFileDirectoryEntryEx, moreFollows bool, err error)
+}
+
+var (
+	fileDirAsyncRegistry   = make(map[C.MmsConnection]*fileDirAsyncCtx)
+	fileDirAsyncRegistryMu sync.Mutex
+)
 
 // NewMmsConnection creates a new non-TLS MmsConnection. Call Destroy when done.
 func NewMmsConnection() *MmsConnection {
@@ -105,6 +132,12 @@ func (c *MmsConnection) Destroy() {
 		mmsConnAsyncRegistryLock.Lock()
 		delete(mmsConnAsyncRegistry, conn)
 		mmsConnAsyncRegistryLock.Unlock()
+		rawMessageRegistryMu.Lock()
+		delete(rawMessageRegistry, conn)
+		rawMessageRegistryMu.Unlock()
+		fileDirAsyncRegistryMu.Lock()
+		delete(fileDirAsyncRegistry, conn)
+		fileDirAsyncRegistryMu.Unlock()
 		C.MmsConnection_destroy(conn)
 	}
 }
@@ -184,6 +217,27 @@ func (c *MmsConnection) GetIsoConnectionParameters() *IsoConnectionParameters {
 	out.RemoteSSelector = sSelectorToSlice(p.remoteSSelector)
 	out.RemotePSelector = pSelectorToSlice(p.remotePSelector)
 	return out
+}
+
+// SetRawMessageHandler sets a callback that receives every raw MMS message (sent or received). Pass nil to clear.
+// The callback may be invoked from a different goroutine; received is true for incoming, false for outgoing.
+func (c *MmsConnection) SetRawMessageHandler(callback func(message []byte, received bool)) {
+	c.connMu.Lock()
+	conn := c.c
+	c.connMu.Unlock()
+	if conn == nil {
+		return
+	}
+	rawMessageRegistryMu.Lock()
+	if callback == nil {
+		delete(rawMessageRegistry, conn)
+		rawMessageRegistryMu.Unlock()
+		C.MmsConnection_setRawMessageHandler(conn, nil, nil)
+		return
+	}
+	rawMessageRegistry[conn] = &rawMessageCtx{callback: callback}
+	rawMessageRegistryMu.Unlock()
+	C.MmsConnection_setRawMessageHandler(conn, (C.MmsRawMessageHandler)(C.rawMessageHandlerBridge), unsafe.Pointer(conn))
 }
 
 func copyApTitle(arr [10]C.uint8_t, len C.int) []byte {
@@ -407,6 +461,19 @@ func (c *MmsConnection) GetMmsConnectionParameters() *MmsConnectionParameters {
 	}
 }
 
+// Conclude sends the MMS conclude service to orderly close the association with the server.
+// The connection is closed; use Connect again to reconnect.
+func (c *MmsConnection) Conclude() error {
+	c.connMu.Lock()
+	defer c.connMu.Unlock()
+	if c.c == nil {
+		return NotConnected
+	}
+	var cError C.MmsError
+	C.MmsConnection_conclude(c.c, &cError)
+	return GetMmsError(cError)
+}
+
 // --- Async read/write context and bridges ---
 
 type readVarAsyncCtx struct {
@@ -449,6 +516,174 @@ func writeVariableAsyncBridge(invokeId C.uint32_t, parameter unsafe.Pointer, mms
 	cb := ctx.callback
 	if cb != nil {
 		cb(GetMmsError(mmsError))
+	}
+}
+
+type genericServiceAsyncCtx struct {
+	callback func(error)
+}
+
+//export genericServiceAsyncBridge
+func genericServiceAsyncBridge(invokeId C.uint32_t, parameter unsafe.Pointer, mmsError C.MmsError, success C._Bool) {
+	_ = invokeId
+	if parameter == nil {
+		return
+	}
+	ctx := (*genericServiceAsyncCtx)(parameter)
+	if ctx.callback != nil {
+		err := GetMmsError(mmsError)
+		if err == nil && !bool(success) {
+			err = Unknown
+		}
+		ctx.callback(err)
+	}
+}
+
+type readNVLDirectoryAsyncCtx struct {
+	callback func(specs []MmsVariableAccessSpec, deletable bool, err error)
+}
+
+//export readNVLDirectoryAsyncBridge
+func readNVLDirectoryAsyncBridge(invokeId C.uint32_t, parameter unsafe.Pointer, mmsError C.MmsError, specs C.LinkedList, deletable C._Bool) {
+	_ = invokeId
+	if parameter == nil {
+		if specs != nil {
+			C.LinkedList_destroyDeep(specs, (C.LinkedListValueDeleteFunction)(C.MmsVariableAccessSpecification_destroy))
+		}
+		return
+	}
+	ctx := (*readNVLDirectoryAsyncCtx)(parameter)
+	var out []MmsVariableAccessSpec
+	if specs != nil {
+		for node := specs; node != nil; node = C.LinkedList_getNext(node) {
+			data := C.LinkedList_getData(node)
+			if data != nil {
+				spec := (*C.MmsVariableAccessSpecification)(data)
+				out = append(out, MmsVariableAccessSpec{
+					DomainID: C.GoString(spec.domainId),
+					ItemID:   C.GoString(spec.itemId),
+				})
+			}
+		}
+		C.LinkedList_destroyDeep(specs, (C.LinkedListValueDeleteFunction)(C.MmsVariableAccessSpecification_destroy))
+	}
+	if ctx.callback != nil {
+		ctx.callback(out, bool(deletable), GetMmsError(mmsError))
+	}
+}
+
+type getVariableAccessAttributesAsyncCtx struct {
+	callback func(*MmsVariableSpecificationRef, error)
+}
+
+//export getVariableAccessAttributesAsyncBridge
+func getVariableAccessAttributesAsyncBridge(invokeId C.uint32_t, parameter unsafe.Pointer, mmsError C.MmsError, spec *C.MmsVariableSpecification) {
+	_ = invokeId
+	if parameter == nil {
+		if spec != nil {
+			C.MmsVariableSpecification_destroy(spec)
+		}
+		return
+	}
+	ctx := (*getVariableAccessAttributesAsyncCtx)(parameter)
+	if ctx.callback != nil {
+		err := GetMmsError(mmsError)
+		if err != nil {
+			if spec != nil {
+				C.MmsVariableSpecification_destroy(spec)
+			}
+			ctx.callback(nil, err)
+			return
+		}
+		var ref *MmsVariableSpecificationRef
+		if spec != nil {
+			ref = &MmsVariableSpecificationRef{c: spec, owned: true, libraryOwned: true}
+		}
+		ctx.callback(ref, nil)
+	}
+}
+
+type identifyAsyncCtx struct {
+	callback func(vendorName, modelName, revision string, err error)
+}
+
+//export identifyAsyncBridge
+func identifyAsyncBridge(invokeId C.uint32_t, parameter unsafe.Pointer, mmsError C.MmsError, vendorName *C.char, modelName *C.char, revision *C.char) {
+	_ = invokeId
+	if parameter == nil {
+		return
+	}
+	ctx := (*identifyAsyncCtx)(parameter)
+	if ctx.callback != nil {
+		v, m, r := "", "", ""
+		if vendorName != nil {
+			v = C.GoString(vendorName)
+		}
+		if modelName != nil {
+			m = C.GoString(modelName)
+		}
+		if revision != nil {
+			r = C.GoString(revision)
+		}
+		ctx.callback(v, m, r, GetMmsError(mmsError))
+	}
+}
+
+//export rawMessageHandlerBridge
+func rawMessageHandlerBridge(parameter unsafe.Pointer, message *C.uint8_t, messageLength C.int, received C._Bool) {
+	if parameter == nil {
+		return
+	}
+	conn := C.MmsConnection(parameter)
+	rawMessageRegistryMu.Lock()
+	ctx := rawMessageRegistry[conn]
+	rawMessageRegistryMu.Unlock()
+	if ctx == nil || ctx.callback == nil {
+		return
+	}
+	n := int(messageLength)
+	var msg []byte
+	if message != nil && n > 0 {
+		msg = C.GoBytes(unsafe.Pointer(message), messageLength)
+	}
+	ctx.callback(msg, bool(received))
+}
+
+//export fileDirectoryAsyncBridge
+func fileDirectoryAsyncBridge(invokeId C.uint32_t, parameter unsafe.Pointer, mmsError C.MmsError, filename *C.char, size C.uint32_t, lastModified C.uint64_t, moreFollows C._Bool) {
+	_ = invokeId
+	if parameter == nil {
+		return
+	}
+	conn := C.MmsConnection(parameter)
+	fileDirAsyncRegistryMu.Lock()
+	ctx := fileDirAsyncRegistry[conn]
+	fileDirAsyncRegistryMu.Unlock()
+	if ctx == nil || ctx.callback == nil {
+		return
+	}
+	err := GetMmsError(mmsError)
+	if err != nil {
+		fileDirAsyncRegistryMu.Lock()
+		delete(fileDirAsyncRegistry, conn)
+		fileDirAsyncRegistryMu.Unlock()
+		ctx.callback(nil, false, err)
+		return
+	}
+	if filename != nil {
+		ctx.entries = append(ctx.entries, MmsFileDirectoryEntryEx{
+			Filename:         C.GoString(filename),
+			FileSize:         uint32(size),
+			LastModifiedTime: uint64(lastModified),
+		})
+	}
+	if filename == nil || !bool(moreFollows) {
+		fileDirAsyncRegistryMu.Lock()
+		delete(fileDirAsyncRegistry, conn)
+		fileDirAsyncRegistryMu.Unlock()
+		entries := make([]MmsFileDirectoryEntryEx, len(ctx.entries))
+		copy(entries, ctx.entries)
+		ctx.callback(entries, bool(moreFollows), nil)
 	}
 }
 
@@ -501,6 +736,124 @@ func (c *MmsConnection) WriteVariableAsync(domainID, itemID string, value *MmsVa
 	ctx := &writeVarAsyncCtx{callback: callback}
 	var cError C.MmsError
 	C.MmsConnection_writeVariableAsync(conn, nil, &cError, cDomain, cItem, value.c, (C.MmsConnection_WriteVariableHandler)(C.writeVariableAsyncBridge), unsafe.Pointer(ctx))
+	return GetMmsError(cError)
+}
+
+// DefineNamedVariableListAsync defines a new domain or VMD scoped named variable list asynchronously.
+// Pass domainID as "" for VMD scope. The callback is invoked on completion; it may run from another goroutine.
+func (c *MmsConnection) DefineNamedVariableListAsync(domainID, listName string, variableSpecs []VariableAccessSpec, callback func(error)) error {
+	if len(variableSpecs) == 0 {
+		if callback != nil {
+			callback(UserProvidedInvalidArgument)
+		}
+		return UserProvidedInvalidArgument
+	}
+	c.connMu.Lock()
+	if c.c == nil {
+		c.connMu.Unlock()
+		if callback != nil {
+			callback(NotConnected)
+		}
+		return NotConnected
+	}
+	conn := c.c
+	c.connMu.Unlock()
+	var cDomain *C.char
+	if domainID != "" {
+		cDomain = C.CString(domainID)
+		defer C.free(unsafe.Pointer(cDomain))
+	}
+	cList := C.CString(listName)
+	defer C.free(unsafe.Pointer(cList))
+	clist := C.LinkedList_create()
+	for _, vs := range variableSpecs {
+		cDom := C.CString(vs.DomainID)
+		cItem := C.CString(vs.ItemID)
+		var spec *C.MmsVariableAccessSpecification
+		if vs.ArrayIndex >= 0 || vs.ComponentName != "" {
+			var cComp *C.char
+			if vs.ComponentName != "" {
+				cComp = C.CString(vs.ComponentName)
+			}
+			spec = C.MmsVariableAccessSpecification_createAlternateAccess(cDom, cItem, C.int32_t(vs.ArrayIndex), cComp)
+		} else {
+			spec = C.MmsVariableAccessSpecification_create(cDom, cItem)
+		}
+		C.LinkedList_add(clist, unsafe.Pointer(spec))
+	}
+	// C layer takes ownership of clist and its elements for the async request
+	ctx := &genericServiceAsyncCtx{callback: callback}
+	var cError C.MmsError
+	C.MmsConnection_defineNamedVariableListAsync(conn, nil, &cError, cDomain, cList, clist, (C.MmsConnection_GenericServiceHandler)(C.genericServiceAsyncBridge), unsafe.Pointer(ctx))
+	return GetMmsError(cError)
+}
+
+// ReadNamedVariableListDirectoryAsync reads the entry list of a named variable list asynchronously.
+// Pass domainID as "" for VMD scope. The callback receives the variable specs and deletable flag; it may run from another goroutine.
+func (c *MmsConnection) ReadNamedVariableListDirectoryAsync(domainID, listName string, callback func(specs []MmsVariableAccessSpec, deletable bool, err error)) error {
+	c.connMu.Lock()
+	if c.c == nil {
+		c.connMu.Unlock()
+		if callback != nil {
+			callback(nil, false, NotConnected)
+		}
+		return NotConnected
+	}
+	conn := c.c
+	c.connMu.Unlock()
+	var cDomain *C.char
+	if domainID != "" {
+		cDomain = C.CString(domainID)
+		defer C.free(unsafe.Pointer(cDomain))
+	}
+	cList := C.CString(listName)
+	defer C.free(unsafe.Pointer(cList))
+	ctx := &readNVLDirectoryAsyncCtx{callback: callback}
+	var cError C.MmsError
+	C.MmsConnection_readNamedVariableListDirectoryAsync(conn, nil, &cError, cDomain, cList, (C.MmsConnection_ReadNVLDirectoryHandler)(C.readNVLDirectoryAsyncBridge), unsafe.Pointer(ctx))
+	return GetMmsError(cError)
+}
+
+// GetVariableAccessAttributesAsync retrieves the variable access attributes (type specification) asynchronously.
+// On success the callback receives a non-nil MmsVariableSpecificationRef; the caller must call Free() on it when done.
+// The callback may run from another goroutine.
+func (c *MmsConnection) GetVariableAccessAttributesAsync(domainID, itemID string, callback func(*MmsVariableSpecificationRef, error)) error {
+	c.connMu.Lock()
+	if c.c == nil {
+		c.connMu.Unlock()
+		if callback != nil {
+			callback(nil, NotConnected)
+		}
+		return NotConnected
+	}
+	conn := c.c
+	c.connMu.Unlock()
+	cDomain := C.CString(domainID)
+	defer C.free(unsafe.Pointer(cDomain))
+	cItem := C.CString(itemID)
+	defer C.free(unsafe.Pointer(cItem))
+	ctx := &getVariableAccessAttributesAsyncCtx{callback: callback}
+	var cError C.MmsError
+	C.MmsConnection_getVariableAccessAttributesAsync(conn, nil, &cError, cDomain, cItem, (C.MmsConnection_GetVariableAccessAttributesHandler)(C.getVariableAccessAttributesAsyncBridge), unsafe.Pointer(ctx))
+	return GetMmsError(cError)
+}
+
+// IdentifyAsync retrieves the server identity (vendor, model, revision) asynchronously.
+// The callback may run from another goroutine.
+func (c *MmsConnection) IdentifyAsync(callback func(vendorName, modelName, revision string, err error)) error {
+	c.connMu.Lock()
+	if c.c == nil {
+		c.connMu.Unlock()
+		if callback != nil {
+			callback("", "", "", NotConnected)
+		}
+		return NotConnected
+	}
+	conn := c.c
+	c.connMu.Unlock()
+	ctx := &identifyAsyncCtx{callback: callback}
+	var cError C.MmsError
+	C.MmsConnection_identifyAsync(conn, nil, &cError, (C.MmsConnection_IdentifyHandler)(C.identifyAsyncBridge), unsafe.Pointer(ctx))
 	return GetMmsError(cError)
 }
 
@@ -579,6 +932,33 @@ func (c *MmsConnection) ReadNamedVariableListValues(domainID, listName string, s
 	}
 	defer C.MmsValue_delete(result)
 	return CMmsValueToMmsValue(result), nil
+}
+
+// ReadNamedVariableListValuesAsync reads the values of a domain or VMD scoped named variable list asynchronously.
+// Pass domainID as "" for VMD scope. specification should be true for IEC 61850 compliant requests.
+// The callback receives a single MmsValue of type Array (Value is []*MmsValue) or nil on error. Caller does not own the value.
+func (c *MmsConnection) ReadNamedVariableListValuesAsync(domainID, listName string, specification bool, callback func(*MmsValue, error)) error {
+	c.connMu.Lock()
+	if c.c == nil {
+		c.connMu.Unlock()
+		if callback != nil {
+			callback(nil, NotConnected)
+		}
+		return NotConnected
+	}
+	conn := c.c
+	c.connMu.Unlock()
+	var cDomain *C.char
+	if domainID != "" {
+		cDomain = C.CString(domainID)
+		defer C.free(unsafe.Pointer(cDomain))
+	}
+	cList := C.CString(listName)
+	defer C.free(unsafe.Pointer(cList))
+	ctx := &readVarAsyncCtx{callback: callback}
+	var cError C.MmsError
+	C.MmsConnection_readNamedVariableListValuesAsync(conn, nil, &cError, cDomain, cList, C.bool(specification), (C.MmsConnection_ReadVariableHandler)(C.readVariableAsyncBridge), unsafe.Pointer(ctx))
+	return GetMmsError(cError)
 }
 
 // WriteNamedVariableList writes values to a domain or VMD scoped named variable list.
@@ -778,6 +1158,45 @@ func (c *MmsConnection) RenameFile(currentName, newName string) error {
 	var cError C.MmsError
 	C.MmsConnection_fileRename(c.c, &cError, cCur, cNew)
 	return GetMmsError(cError)
+}
+
+// FileDirectoryAsync retrieves the file directory asynchronously. fileSpecification is the path/pattern; use "" for continueAfter to start from the beginning.
+// The callback receives the list of entries, moreFollows (true if more data is available server-side), and any error.
+func (c *MmsConnection) FileDirectoryAsync(fileSpecification, continueAfter string, callback func(entries []MmsFileDirectoryEntryEx, moreFollows bool, err error)) error {
+	c.connMu.Lock()
+	if c.c == nil {
+		c.connMu.Unlock()
+		if callback != nil {
+			callback(nil, false, NotConnected)
+		}
+		return NotConnected
+	}
+	conn := c.c
+	c.connMu.Unlock()
+	if callback == nil {
+		return UserProvidedInvalidArgument
+	}
+	cSpec := C.CString(fileSpecification)
+	defer C.free(unsafe.Pointer(cSpec))
+	var cCont *C.char
+	if continueAfter != "" {
+		cCont = C.CString(continueAfter)
+		defer C.free(unsafe.Pointer(cCont))
+	}
+	ctx := &fileDirAsyncCtx{callback: callback}
+	fileDirAsyncRegistryMu.Lock()
+	fileDirAsyncRegistry[conn] = ctx
+	fileDirAsyncRegistryMu.Unlock()
+	var cError C.MmsError
+	C.MmsConnection_getFileDirectoryAsync(conn, nil, &cError, cSpec, cCont, (C.MmsConnection_FileDirectoryHandler)(C.fileDirectoryAsyncBridge), unsafe.Pointer(conn))
+	if err := GetMmsError(cError); err != nil {
+		fileDirAsyncRegistryMu.Lock()
+		delete(fileDirAsyncRegistry, conn)
+		fileDirAsyncRegistryMu.Unlock()
+		callback(nil, false, err)
+		return err
+	}
+	return nil
 }
 
 func convertCJournalEntryToMms(entry C.MmsJournalEntry) MmsJournalEntry {

@@ -116,7 +116,7 @@ func (c *Client) GetVariableAccessAttributes(domainID, itemID string) (*MmsVaria
 	if spec == nil {
 		return nil, NullPointer
 	}
-	return &MmsVariableSpecificationRef{c: spec}, nil
+	return &MmsVariableSpecificationRef{c: spec, owned: true, libraryOwned: true}, nil
 }
 
 // GetDomainNames returns the list of MMS domain names on the server.

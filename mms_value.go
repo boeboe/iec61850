@@ -125,6 +125,35 @@ func (r *MmsValueRef) GetBitStringSize() int {
 	return int(C.MmsValue_getBitStringSize(r.c))
 }
 
+// EncodeMmsData encodes the value as BER-encoded MMS data into buffer starting at startPos.
+// If encode is false, no bytes are written and the returned length is the encoded size only (buffer may be nil).
+// Returns the encoded length in bytes.
+func (r *MmsValueRef) EncodeMmsData(buffer []byte, startPos int, encode bool) int {
+	if r == nil || r.c == nil {
+		return 0
+	}
+	var buf *C.uint8_t
+	if encode && len(buffer) > startPos {
+		buf = (*C.uint8_t)(unsafe.Pointer(&buffer[startPos]))
+	}
+	return int(C.MmsValue_encodeMmsData(r.c, buf, C.int(startPos), C.bool(encode)))
+}
+
+// DecodeMmsData decodes BER-encoded MMS data from buffer[startPos:startPos+length] and returns a new MmsValueRef.
+// The caller must call Free() on the returned value when done. endPos is the buffer position after the decoded value.
+func DecodeMmsData(buffer []byte, startPos, length int) (value *MmsValueRef, endPos int) {
+	if length <= 0 || startPos+length > len(buffer) {
+		return nil, startPos
+	}
+	var cEnd C.int
+	cBuf := (*C.uint8_t)(unsafe.Pointer(&buffer[startPos]))
+	cVal := C.MmsValue_decodeMmsData(cBuf, C.int(0), C.int(length), &cEnd)
+	if cVal == nil {
+		return nil, startPos
+	}
+	return &MmsValueRef{c: cVal}, startPos + int(cEnd)
+}
+
 // ToDouble returns the value as float64. The underlying MmsValue must be of type MMS_FLOAT.
 func (r *MmsValueRef) ToDouble() float64 {
 	if r == nil || r.c == nil {

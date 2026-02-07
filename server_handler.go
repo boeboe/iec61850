@@ -16,6 +16,8 @@ extern ControlHandlerResult controlHandlerBridge(ControlAction action, void* par
 
 extern bool acseAuthenticatorBridge(void* parameter, AcseAuthenticationParameter authParameter, void** securityToken, IsoApplicationReference* appReference);
 
+extern void connectionIndicationBridge(IedServer self, ClientConnection connection, bool connected, void* parameter);
+
 static Buffer AcseAuthenticationParameter_GetBuffer(AcseAuthenticationParameter authParameter) {
     if (authParameter->mechanism == ACSE_AUTH_PASSWORD) {
         uint8_t *buf = authParameter->value.password.octetString;
@@ -33,6 +35,7 @@ import "C"
 
 import (
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"unsafe"
 )
@@ -41,6 +44,9 @@ var (
 	callbackIdGen        = atomic.Int32{}
 	writeAccessCallbacks = make(map[int32]*writeAccessCallback)
 	controlCallbacks     = make(map[int32]*controlCallback)
+
+	connectionIndicationHandlers   = make(map[uintptr]ConnectionIndicationHandler)
+	connectionIndicationHandlersMu sync.Mutex
 )
 
 type writeAccessCallback struct {
@@ -214,6 +220,36 @@ func (is *IedServer) SetAuthenticator(clientAuthenticator ClientAuthenticator) {
 	is.clientAuthenticator = clientAuthenticator
 	cPtr := unsafe.Pointer(is)
 	C.IedServer_setAuthenticator(is.server, (*[0]byte)(C.acseAuthenticatorBridge), cPtr)
+}
+
+//export connectionIndicationBridge
+func connectionIndicationBridge(self C.IedServer, connection C.ClientConnection, connected C.bool, parameter unsafe.Pointer) {
+	if parameter == nil {
+		return
+	}
+	key := uintptr(parameter)
+	connectionIndicationHandlersMu.Lock()
+	handler := connectionIndicationHandlers[key]
+	connectionIndicationHandlersMu.Unlock()
+	if handler == nil {
+		return
+	}
+	conn := &ClientConnection{c: connection}
+	handler(conn, bool(connected))
+}
+
+// SetConnectionIndicationHandler sets a callback invoked when a client connects or disconnects.
+func (is *IedServer) SetConnectionIndicationHandler(handler ConnectionIndicationHandler) {
+	is.connectionIndicationHandler = handler
+	key := uintptr(unsafe.Pointer(is.server))
+	connectionIndicationHandlersMu.Lock()
+	if handler != nil {
+		connectionIndicationHandlers[key] = handler
+	} else {
+		delete(connectionIndicationHandlers, key)
+	}
+	connectionIndicationHandlersMu.Unlock()
+	C.IedServer_setConnectionIndicationHandler(is.server, (*[0]byte)(C.connectionIndicationBridge), unsafe.Pointer(is.server))
 }
 
 // AccessPolicy is the default write access policy for an FC (allow or deny).
