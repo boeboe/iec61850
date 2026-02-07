@@ -553,12 +553,12 @@ func (r *MmsValueRef) GetSizeInMemory() int
 |------------|-------------------|------|--------|
 | `MmsServer_installFileAccessHandler()` | ✅ `SetFileAccessHandler()` | server_mms.go | Complete |
 | `MmsServer_installVariableListAccessHandler()` | ✅ `InstallVariableListAccessHandler()` | server_mms.go | Complete |
-| `MmsServer_installReadJournalHandler()` | — | N/A (C API is LIB61850_INTERNAL; cgo export signature conflict) | N/A |
-| `MmsServer_installGetNameListHandler()` | — | N/A (C API is LIB61850_INTERNAL; cgo export signature conflict) | N/A |
-| `MmsServer_installObtainFileHandler()` | — | N/A (C API is LIB61850_INTERNAL; cgo export signature conflict) | N/A |
-| `MmsServer_installGetFileCompleteHandler()` | — | N/A (C API is LIB61850_INTERNAL; cgo export signature conflict) | N/A |
+| `MmsServer_installReadJournalHandler()` | ✅ `InstallReadJournalHandler()` | server_mms.go, shim.c | Complete |
+| `MmsServer_installGetNameListHandler()` | ✅ `InstallGetNameListHandler()` | server_mms.go, shim.c | Complete |
+| `MmsServer_installObtainFileHandler()` | ✅ `InstallObtainFileHandler()` | server_mms.go, shim.c | Complete |
+| `MmsServer_installGetFileCompleteHandler()` | ✅ `InstallGetFileCompleteHandler()` | server_mms.go, shim.c | Complete |
 
-**Coverage: 2/6** — SetFileAccessHandler and InstallVariableListAccessHandler are implemented. The four install* handlers are internal C API; Go export type conflicts prevent wiring without a C shim.
+**Coverage: 6/6** — All six handlers are implemented. The four install* handlers use a C shim (shim.c) to avoid cgo export type conflicts with the internal C API.
 
 ```go
 // Implemented handlers
@@ -566,6 +566,11 @@ type FileAccessHandler func(
     service MmsFileServiceType, 
     localFilename, otherFilename string,
 ) error
+
+type ReadJournalHandler func(domainID, logName string) bool
+type GetNameListHandler func(nameListType MmsGetNameListType, domainID string) bool
+type ObtainFileHandler func(sourceFilename, destinationFilename string) bool
+type GetFileCompleteHandler func(destinationFilename string)
 
 type VariableListAccessHandler func(
     accessType MmsVariableListAccessType,

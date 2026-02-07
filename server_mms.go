@@ -12,6 +12,11 @@ extern MmsError variableListAccessHandlerBridge(void* parameter, MmsVariableList
 static MmsError fileAccessHandlerWrap(void* p, MmsServerConnection c, MmsFileServiceType s, const char* local, const char* other) {
 	return fileAccessHandlerBridge(p, c, s, (char*)local, (char*)other);
 }
+
+extern bool readJournalHandlerShimExport(void* param, MmsDomain* domain, const char* logName, MmsServerConnection connection);
+extern bool getNameListHandlerShimExport(void* param, MmsGetNameListType nameListType, MmsDomain* domain, MmsServerConnection connection);
+extern bool obtainFileHandlerShimExport(void* param, MmsServerConnection connection, const char* sourceFilename, const char* destinationFilename);
+extern void getFileCompleteHandlerShimExport(void* param, MmsServerConnection connection, const char* destinationFilename);
 */
 import "C"
 import (
@@ -51,6 +56,16 @@ const (
 	MmsVarlistTypeVmdSpecific          MmsVariableListType = 2
 )
 
+// MmsGetNameListType indicates the type of GetNameList request (domains, journals, data sets, or data).
+type MmsGetNameListType int
+
+const (
+	MmsGetNameListDomains   MmsGetNameListType = 0
+	MmsGetNameListJournals  MmsGetNameListType = 1
+	MmsGetNameListDataSets  MmsGetNameListType = 2
+	MmsGetNameListData      MmsGetNameListType = 3
+)
+
 // VariableListAccessHandler is called when a client accesses a named variable list. Return nil to allow, or an MmsError to deny.
 // DomainID is empty for association- or VMD-specific lists.
 type VariableListAccessHandler func(accessType MmsVariableListAccessType, listType MmsVariableListType, domainID, listName string) error
@@ -65,11 +80,36 @@ var (
 	variableListAccessRegistryMu sync.Mutex
 	variableListAccessNextId     int32
 	variableListAccessParamPool  []*variableListAccessParam
+
+	readJournalRegistry    = make(map[int32]ReadJournalHandler)
+	readJournalRegistryMu  sync.Mutex
+	readJournalNextId      int32
+	readJournalParamPool   []*readJournalParam
+
+	getNameListRegistry    = make(map[int32]GetNameListHandler)
+	getNameListRegistryMu  sync.Mutex
+	getNameListNextId      int32
+	getNameListParamPool   []*getNameListParam
+
+	obtainFileRegistry    = make(map[int32]ObtainFileHandler)
+	obtainFileRegistryMu   sync.Mutex
+	obtainFileNextId       int32
+	obtainFileParamPool    []*obtainFileParam
+
+	getFileCompleteRegistry    = make(map[int32]GetFileCompleteHandler)
+	getFileCompleteRegistryMu  sync.Mutex
+	getFileCompleteNextId      int32
+	getFileCompleteParamPool   []*getFileCompleteParam
 )
 
 type variableListAccessParam struct {
 	id int32
 }
+
+type readJournalParam struct{ id int32 }
+type getNameListParam struct{ id int32 }
+type obtainFileParam struct{ id int32 }
+type getFileCompleteParam struct{ id int32 }
 
 // fileAccessHandlerParam holds the callback id passed to C; must stay allocated for callback lifetime.
 type fileAccessHandlerParam struct {
@@ -78,6 +118,18 @@ type fileAccessHandlerParam struct {
 
 // FileAccessHandler is called when a client requests an MMS file service. Return nil to allow, or an error (e.g. MMS_ERROR_FILE_FILE_ACCESS_DENIED) to deny.
 type FileAccessHandler func(service MmsFileServiceType, localFilename, otherFilename string) error
+
+// ReadJournalHandler is called when a client accesses a journal. Return true to allow, false to deny.
+type ReadJournalHandler func(domainID, logName string) bool
+
+// GetNameListHandler is called when a client requests a name list (domains, journals, data sets, or data). Return true to allow, false to deny.
+type GetNameListHandler func(nameListType MmsGetNameListType, domainID string) bool
+
+// ObtainFileHandler is called when a client uploads a file (obtainFile). Return true to allow, false to deny.
+type ObtainFileHandler func(sourceFilename, destinationFilename string) bool
+
+// GetFileCompleteHandler is called when a file upload (obtainFile) has completed.
+type GetFileCompleteHandler func(destinationFilename string)
 
 //export fileAccessHandlerBridge
 func fileAccessHandlerBridge(parameter unsafe.Pointer, connection C.MmsServerConnection, service C.MmsFileServiceType, localFilename, otherFilename *C.char) C.MmsError {
@@ -152,6 +204,96 @@ func variableListAccessHandlerBridge(parameter unsafe.Pointer, accessType C.MmsV
 	return C.MMS_ERROR_ACCESS_OTHER
 }
 
+//export readJournalBridgeGo
+func readJournalBridgeGo(param unsafe.Pointer, domain *C.MmsDomain, logName *C.char, conn C.MmsServerConnection) C.int {
+	_ = conn
+	if param == nil {
+		return 1
+	}
+	p := (*readJournalParam)(param)
+	readJournalRegistryMu.Lock()
+	handler := readJournalRegistry[p.id]
+	readJournalRegistryMu.Unlock()
+	if handler == nil {
+		return 1
+	}
+	domainID := "" // MmsDomain_getName is internal
+	log := ""
+	if logName != nil {
+		log = C.GoString(logName)
+	}
+	if handler(domainID, log) {
+		return 1
+	}
+	return 0
+}
+
+//export getNameListBridgeGo
+func getNameListBridgeGo(param unsafe.Pointer, nameListType C.int, domain *C.MmsDomain, conn C.MmsServerConnection) C.int {
+	_ = conn
+	if param == nil {
+		return 1
+	}
+	p := (*getNameListParam)(param)
+	getNameListRegistryMu.Lock()
+	handler := getNameListRegistry[p.id]
+	getNameListRegistryMu.Unlock()
+	if handler == nil {
+		return 1
+	}
+	domainID := ""
+	if handler(MmsGetNameListType(nameListType), domainID) {
+		return 1
+	}
+	return 0
+}
+
+//export obtainFileBridgeGo
+func obtainFileBridgeGo(param unsafe.Pointer, conn C.MmsServerConnection, sourceFilename, destinationFilename *C.char) C.int {
+	_ = conn
+	if param == nil {
+		return 1
+	}
+	p := (*obtainFileParam)(param)
+	obtainFileRegistryMu.Lock()
+	handler := obtainFileRegistry[p.id]
+	obtainFileRegistryMu.Unlock()
+	if handler == nil {
+		return 1
+	}
+	src, dst := "", ""
+	if sourceFilename != nil {
+		src = C.GoString(sourceFilename)
+	}
+	if destinationFilename != nil {
+		dst = C.GoString(destinationFilename)
+	}
+	if handler(src, dst) {
+		return 1
+	}
+	return 0
+}
+
+//export getFileCompleteBridgeGo
+func getFileCompleteBridgeGo(param unsafe.Pointer, conn C.MmsServerConnection, destinationFilename *C.char) {
+	_ = conn
+	if param == nil {
+		return
+	}
+	p := (*getFileCompleteParam)(param)
+	getFileCompleteRegistryMu.Lock()
+	handler := getFileCompleteRegistry[p.id]
+	getFileCompleteRegistryMu.Unlock()
+	if handler == nil {
+		return
+	}
+	dst := ""
+	if destinationFilename != nil {
+		dst = C.GoString(destinationFilename)
+	}
+	handler(dst)
+}
+
 // InstallVariableListAccessHandler installs a callback invoked when a client accesses a named variable list (create, delete, read, write, get directory).
 // Return nil to allow the access, or an error (e.g. AccessDenied) to deny.
 func (is *IedServer) InstallVariableListAccessHandler(handler VariableListAccessHandler) {
@@ -183,6 +325,70 @@ func (is *IedServer) SetFileAccessHandler(handler FileAccessHandler) {
 	fileAccessHandlerRegistryMu.Unlock()
 	mmsServer := C.IedServer_getMmsServer(is.server)
 	C.MmsServer_installFileAccessHandler(mmsServer, (C.MmsFileAccessHandler)(C.fileAccessHandlerWrap), unsafe.Pointer(param))
+}
+
+// InstallReadJournalHandler installs a callback invoked when a client accesses a journal. Return true to allow, false to deny.
+func (is *IedServer) InstallReadJournalHandler(handler ReadJournalHandler) {
+	if handler == nil {
+		return
+	}
+	readJournalRegistryMu.Lock()
+	readJournalNextId++
+	id := readJournalNextId
+	readJournalRegistry[id] = handler
+	param := &readJournalParam{id: id}
+	readJournalParamPool = append(readJournalParamPool, param)
+	readJournalRegistryMu.Unlock()
+	mmsServer := C.IedServer_getMmsServer(is.server)
+	C.MmsServer_installReadJournalHandler(mmsServer, (C.MmsReadJournalHandler)(C.readJournalHandlerShimExport), unsafe.Pointer(param))
+}
+
+// InstallGetNameListHandler installs a callback invoked when a client requests a name list (domains, journals, data sets, or data). Return true to allow, false to deny.
+func (is *IedServer) InstallGetNameListHandler(handler GetNameListHandler) {
+	if handler == nil {
+		return
+	}
+	getNameListRegistryMu.Lock()
+	getNameListNextId++
+	id := getNameListNextId
+	getNameListRegistry[id] = handler
+	param := &getNameListParam{id: id}
+	getNameListParamPool = append(getNameListParamPool, param)
+	getNameListRegistryMu.Unlock()
+	mmsServer := C.IedServer_getMmsServer(is.server)
+	C.MmsServer_installGetNameListHandler(mmsServer, (C.MmsGetNameListHandler)(C.getNameListHandlerShimExport), unsafe.Pointer(param))
+}
+
+// InstallObtainFileHandler installs a callback invoked when a client uploads a file (obtainFile). Return true to allow, false to deny.
+func (is *IedServer) InstallObtainFileHandler(handler ObtainFileHandler) {
+	if handler == nil {
+		return
+	}
+	obtainFileRegistryMu.Lock()
+	obtainFileNextId++
+	id := obtainFileNextId
+	obtainFileRegistry[id] = handler
+	param := &obtainFileParam{id: id}
+	obtainFileParamPool = append(obtainFileParamPool, param)
+	obtainFileRegistryMu.Unlock()
+	mmsServer := C.IedServer_getMmsServer(is.server)
+	C.MmsServer_installObtainFileHandler(mmsServer, (C.MmsObtainFileHandler)(C.obtainFileHandlerShimExport), unsafe.Pointer(param))
+}
+
+// InstallGetFileCompleteHandler installs a callback invoked when a file upload (obtainFile) has completed.
+func (is *IedServer) InstallGetFileCompleteHandler(handler GetFileCompleteHandler) {
+	if handler == nil {
+		return
+	}
+	getFileCompleteRegistryMu.Lock()
+	getFileCompleteNextId++
+	id := getFileCompleteNextId
+	getFileCompleteRegistry[id] = handler
+	param := &getFileCompleteParam{id: id}
+	getFileCompleteParamPool = append(getFileCompleteParamPool, param)
+	getFileCompleteRegistryMu.Unlock()
+	mmsServer := C.IedServer_getMmsServer(is.server)
+	C.MmsServer_installGetFileCompleteHandler(mmsServer, (C.MmsGetFileCompleteHandler)(C.getFileCompleteHandlerShimExport), unsafe.Pointer(param))
 }
 
 // SetMaxMmsConnections sets the maximum number of MMS client connections at runtime.
