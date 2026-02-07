@@ -57,6 +57,16 @@ func NewMmsValueBinaryTime(timeOfDay bool) *MmsValueRef {
 	return &MmsValueRef{c: C.MmsValue_newBinaryTime(C.bool(timeOfDay))}
 }
 
+// NewMmsValueUtcTimeByMsTime creates an MMS UTC time value from milliseconds since Unix epoch. Caller must call Free() when done.
+func NewMmsValueUtcTimeByMsTime(timevalMs uint64) *MmsValueRef {
+	return &MmsValueRef{c: C.MmsValue_newUtcTimeByMsTime(C.uint64_t(timevalMs))}
+}
+
+// NewMmsValueDataAccessError creates an MMS data access error value. Caller must call Free() when done.
+func NewMmsValueDataAccessError(accessError MmsDataAccessError) *MmsValueRef {
+	return &MmsValueRef{c: C.MmsValue_newDataAccessError(C.MmsDataAccessError(accessError))}
+}
+
 // SetBinaryTime sets the value in milliseconds since Unix epoch.
 func (r *MmsValueRef) SetBinaryTime(timestampMs uint64) {
 	if r != nil && r.c != nil {
@@ -165,6 +175,30 @@ func (r *MmsValueRef) GetType() MmsType {
 		return -1
 	}
 	return MmsType(C.MmsValue_getType(r.c))
+}
+
+// GetDataAccessError returns the data access error code when the value type is MMS_DATA_ACCESS_ERROR.
+func (r *MmsValueRef) GetDataAccessError() MmsDataAccessError {
+	if r == nil || r.c == nil {
+		return DATA_ACCESS_ERROR_OBJECT_INVALIDATED
+	}
+	return MmsDataAccessError(C.MmsValue_getDataAccessError(r.c))
+}
+
+// GetNumberOfSetBits returns the number of bits set to 1 in a bit string. Returns 0 for non–bit-string values.
+func (r *MmsValueRef) GetNumberOfSetBits() int {
+	if r == nil || r.c == nil {
+		return 0
+	}
+	return int(C.MmsValue_getNumberOfSetBits(r.c))
+}
+
+// GetSizeInMemory returns the approximate size in bytes of the value representation in memory.
+func (r *MmsValueRef) GetSizeInMemory() int {
+	if r == nil || r.c == nil {
+		return 0
+	}
+	return int(C.MmsValue_getSizeInMemory(r.c))
 }
 
 // MmsValueCreateEmptyArray creates an empty array of the given size. Caller must call Free() when done.
@@ -283,4 +317,22 @@ func (v *MmsValue) SetAllBitStringBits() error {
 	// Without C backing we don't know bit size; set to all 1s for 32 bits
 	v.Value = uint32(0xffffffff)
 	return nil
+}
+
+// GetDataAccessError returns the data access error code when the value type is DataAccessError.
+// Only valid when v.Type == DataAccessError and Value holds an int or MmsDataAccessError.
+func (v *MmsValue) GetDataAccessError() (MmsDataAccessError, error) {
+	if v == nil || v.Type != DataAccessError {
+		return DATA_ACCESS_ERROR_OBJECT_INVALIDATED, UnSupportedOperation
+	}
+	switch val := v.Value.(type) {
+	case MmsDataAccessError:
+		return val, nil
+	case int:
+		return MmsDataAccessError(val), nil
+	case int32:
+		return MmsDataAccessError(val), nil
+	default:
+		return DATA_ACCESS_ERROR_OBJECT_INVALIDATED, UnSupportedOperation
+	}
 }

@@ -109,6 +109,143 @@ func (c *MmsConnection) Destroy() {
 	}
 }
 
+// SetConnectTimeout sets the connect timeout in milliseconds.
+func (c *MmsConnection) SetConnectTimeout(timeoutMs uint32) {
+	c.connMu.Lock()
+	defer c.connMu.Unlock()
+	if c.c != nil {
+		C.MmsConnection_setConnectTimeout(c.c, C.uint32_t(timeoutMs))
+	}
+}
+
+// GetConnectTimeout returns the connect timeout in milliseconds. The C library does not expose a getter; returns 0.
+func (c *MmsConnection) GetConnectTimeout() uint32 {
+	return 0
+}
+
+// SetRequestTimeout sets the request timeout in milliseconds.
+func (c *MmsConnection) SetRequestTimeout(timeoutMs uint32) {
+	c.connMu.Lock()
+	defer c.connMu.Unlock()
+	if c.c != nil {
+		C.MmsConnection_setRequestTimeout(c.c, C.uint32_t(timeoutMs))
+	}
+}
+
+// GetRequestTimeout returns the request timeout in milliseconds.
+func (c *MmsConnection) GetRequestTimeout() uint32 {
+	c.connMu.Lock()
+	defer c.connMu.Unlock()
+	if c.c == nil {
+		return 0
+	}
+	return uint32(C.MmsConnection_getRequestTimeout(c.c))
+}
+
+// SetLocalDetail sets the maximum MMS PDU size (local detail) for this connection.
+func (c *MmsConnection) SetLocalDetail(localDetail int32) {
+	c.connMu.Lock()
+	defer c.connMu.Unlock()
+	if c.c != nil {
+		C.MmsConnection_setLocalDetail(c.c, C.int32_t(localDetail))
+	}
+}
+
+// GetLocalDetail returns the maximum MMS PDU size (local detail) for this connection.
+func (c *MmsConnection) GetLocalDetail() int32 {
+	c.connMu.Lock()
+	defer c.connMu.Unlock()
+	if c.c == nil {
+		return 0
+	}
+	return int32(C.MmsConnection_getLocalDetail(c.c))
+}
+
+// GetIsoConnectionParameters returns a copy of the ISO connection parameters (selectors, AP titles). Returns nil if connection is invalid.
+func (c *MmsConnection) GetIsoConnectionParameters() *IsoConnectionParameters {
+	c.connMu.Lock()
+	defer c.connMu.Unlock()
+	if c.c == nil {
+		return nil
+	}
+	p := C.MmsConnection_getIsoConnectionParameters(c.c)
+	if p == nil {
+		return nil
+	}
+	out := &IsoConnectionParameters{}
+	out.LocalAeQualifier = int32(p.localAEQualifier)
+	out.RemoteAeQualifier = int32(p.remoteAEQualifier)
+	out.LocalApTitle = copyApTitle(p.localApTitle, p.localApTitleLen)
+	out.RemoteApTitle = copyApTitle(p.remoteApTitle, p.remoteApTitleLen)
+	out.LocalTSelector = tSelectorToSlice(p.localTSelector)
+	out.LocalSSelector = sSelectorToSlice(p.localSSelector)
+	out.LocalPSelector = pSelectorToSlice(p.localPSelector)
+	out.RemoteTSelector = tSelectorToSlice(p.remoteTSelector)
+	out.RemoteSSelector = sSelectorToSlice(p.remoteSSelector)
+	out.RemotePSelector = pSelectorToSlice(p.remotePSelector)
+	return out
+}
+
+func copyApTitle(arr [10]C.uint8_t, len C.int) []byte {
+	n := int(len)
+	if n <= 0 {
+		return nil
+	}
+	if n > 10 {
+		n = 10
+	}
+	out := make([]byte, n)
+	for i := 0; i < n; i++ {
+		out[i] = byte(arr[i])
+	}
+	return out
+}
+
+func tSelectorToSlice(s C.TSelector) []byte {
+	n := int(s.size)
+	if n <= 0 {
+		return nil
+	}
+	if n > 4 {
+		n = 4
+	}
+	out := make([]byte, n)
+	for i := 0; i < n; i++ {
+		out[i] = byte(s.value[i])
+	}
+	return out
+}
+
+func sSelectorToSlice(s C.SSelector) []byte {
+	n := int(s.size)
+	if n <= 0 {
+		return nil
+	}
+	if n > 16 {
+		n = 16
+	}
+	out := make([]byte, n)
+	for i := 0; i < n; i++ {
+		out[i] = byte(s.value[i])
+	}
+	return out
+}
+
+func pSelectorToSlice(s C.PSelector) []byte {
+	n := int(s.size)
+	if n <= 0 {
+		return nil
+	}
+	if n > 16 {
+		n = 16
+	}
+	out := make([]byte, n)
+	for i := 0; i < n; i++ {
+		out[i] = byte(s.value[i])
+	}
+	return out
+}
+
 // ConnectAsync starts a non-blocking connection. The callback is invoked with nil when connected or with an error on failure/close.
 func (c *MmsConnection) ConnectAsync(hostname string, port int, callback func(error)) error {
 	c.connMu.Lock()

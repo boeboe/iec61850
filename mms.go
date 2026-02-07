@@ -116,7 +116,7 @@ func toGoValue(mmsValue *C.MmsValue, mmsType MmsType) (interface{}, error) {
 		}
 	case DataAccessError:
 		errorCode := C.MmsValue_getDataAccessError(mmsValue)
-		return nil, fmt.Errorf("failed to read value (error code: %d)", int(errorCode))
+		return MmsDataAccessError(errorCode), nil
 	default:
 		return nil, fmt.Errorf("unsupported type %d", mmsType)
 	}
