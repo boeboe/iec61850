@@ -1,5 +1,10 @@
 name: Build libiec61850 Libraries
 
+# Workflow Behavior:
+# - Push to any branch: Builds libraries but does NOT commit them
+# - Manual trigger: Builds libraries and commits ONLY if 'commit_libraries' is set to true
+# - Artifacts are always uploaded for download regardless of commit setting
+
 on:
   workflow_dispatch:
     inputs:
@@ -698,13 +703,24 @@ jobs:
           retention-days: 30
 
   verify-and-commit:
-    name: Verify and Commit Libraries
+    name: Verify Build and Optionally Commit
     needs: [build-linux-amd64, build-linux-armv7l, build-linux-armv8, build-macos-arm64, build-macos-amd64, build-windows-amd64]
     runs-on: ubuntu-latest
-    if: github.event.inputs.commit_libraries == 'true' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Check commit mode
+        run: |
+          if [ "${{ github.event.inputs.commit_libraries }}" == "true" ]; then
+            echo "::notice::Libraries WILL be committed to repository"
+            echo "WILL_COMMIT=true" >> $GITHUB_ENV
+          else
+            echo "::notice::Libraries will NOT be committed (build and verify only)"
+            echo "WILL_COMMIT=false" >> $GITHUB_ENV
+          fi
+          echo "Triggered by: ${{ github.event_name }}"
+          echo "Branch/Ref: ${{ github.ref }}"
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -743,13 +759,13 @@ jobs:
           ls -lh libiec61850/lib/*/libiec61850.a
 
       - name: Configure Git
-        if: github.event.inputs.commit_libraries == 'true'
+        if: env.WILL_COMMIT == 'true'
         run: |
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
 
       - name: Commit libraries
-        if: github.event.inputs.commit_libraries == 'true'
+        if: env.WILL_COMMIT == 'true'
         run: |
           git add libiec61850/lib/*/*.a
           if git diff --staged --quiet; then
@@ -778,6 +794,18 @@ jobs:
         run: |
           echo "# Build Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Show commit status
+          if [ "${{ env.WILL_COMMIT }}" == "true" ]; then
+            echo "## ✅ Libraries Committed to Repository" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "## 📦 Libraries Built (Not Committed)" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "> **Note:** Libraries were built and verified but not committed to the repository." >> $GITHUB_STEP_SUMMARY
+            echo "> To commit libraries, manually trigger this workflow with 'Commit built libraries' enabled." >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
           echo "## Built Libraries" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Platform | Size | Status |" >> $GITHUB_STEP_SUMMARY
