@@ -15,17 +15,12 @@ import (
 func TestGoosePublisher(t *testing.T) {
 	publisher, err := iec61850.NewGoosePublisher(iec61850.GoosePublisherConf{
 		InterfaceID: "eth0",
-		AppID:       1000,
-		DstAddr: [6]uint8{
-			0x01,
-			0x0c,
-			0xcd,
-			0x01,
-			0x00,
-			0x01,
+		CommParameters: iec61850.CommParameters{
+			AppID:        1000,
+			DstAddr:      [6]uint8{0x01, 0x0c, 0xcd, 0x01, 0x00, 0x01},
+			VlanID:       0,
+			VlanPriority: 4,
 		},
-		VlanID:       0,
-		VlanPriority: 4,
 	})
 	if err != nil {
 		t.Fatal(err)

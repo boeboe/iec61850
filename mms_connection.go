@@ -1858,6 +1858,7 @@ func (c *MmsConnection) ReadJournalStartAfterAsync(domainID, journalName string,
 	if timeSpec != nil {
 		C.MmsValue_setBinaryTime(timeV, C.uint64_t(*timeSpec))
 	}
+	// C library requires non-NULL entrySpecification (it calls MmsValue_getType on it).
 	var entryV *C.MmsValue
 	if len(entryID) > 0 {
 		entryV = C.MmsValue_newOctetString(C.int(len(entryID)), C.int(len(entryID)))
@@ -1865,6 +1866,9 @@ func (c *MmsConnection) ReadJournalStartAfterAsync(domainID, journalName string,
 		for i, b := range entryID {
 			C.MmsValue_setOctetStringOctet(entryV, C.int(i), C.uint8_t(b))
 		}
+	} else {
+		entryV = C.MmsValue_newOctetString(0, 0)
+		defer C.MmsValue_delete(entryV)
 	}
 	ctx := &readJournalAsyncCtx{callback: callback}
 	var cError C.MmsError
@@ -1893,6 +1897,7 @@ func (c *MmsConnection) ReadJournalStartAfter(domainID, journalName string, entr
 	if timeSpec != nil {
 		C.MmsValue_setBinaryTime(timeV, C.uint64_t(*timeSpec))
 	}
+	// C library requires non-NULL entrySpecification (it calls MmsValue_getType on it).
 	var entryV *C.MmsValue
 	if len(entryID) > 0 {
 		entryV = C.MmsValue_newOctetString(C.int(len(entryID)), C.int(len(entryID)))
@@ -1900,6 +1905,9 @@ func (c *MmsConnection) ReadJournalStartAfter(domainID, journalName string, entr
 		for i, b := range entryID {
 			C.MmsValue_setOctetStringOctet(entryV, C.int(i), C.uint8_t(b))
 		}
+	} else {
+		entryV = C.MmsValue_newOctetString(0, 0)
+		defer C.MmsValue_delete(entryV)
 	}
 	var cMore C.bool
 	var cError C.MmsError

@@ -669,6 +669,42 @@ entries, deletable, err := client.ReadNamedVariableListDirectory("domain", "list
 
 ---
 
+### ReadDataSetValues
+
+**Go Function**: `func (c *Client) ReadDataSetValues(dataSetReference string) (*ClientDataSet, error)`  
+**C Function**: `IedConnection_readDataSetValues()`
+
+**Description**: Reads data set values from the server. dataSetReference is the object reference (e.g. "LD/LN.dsName" or "@asName"). The returned ClientDataSet can be used with NewGooseSubscriberWithDataSet via GooseDataSetValues(); keep the ClientDataSet alive for the lifetime of that subscriber.
+
+**Example**:
+```go
+dataSet, err := client.ReadDataSetValues("simpleIOGenericIO/LLN0$dataset1")
+if err != nil { log.Fatal(err) }
+defer dataSet.Destroy()
+gooseVals := dataSet.GooseDataSetValues()
+sub := iec61850.NewGooseSubscriberWithDataSet(conf, &gooseVals)
+```
+
+---
+
+### ClientDataSet.Destroy
+
+**Go Function**: `func (d *ClientDataSet) Destroy()`  
+**C Function**: `ClientDataSet_destroy()`
+
+**Description**: Frees the ClientDataSet. Do not use it or any GooseDataSetValues derived from it after Destroy.
+
+---
+
+### ClientDataSet.GooseDataSetValues
+
+**Go Function**: `func (d *ClientDataSet) GooseDataSetValues() GooseDataSetValues`  
+**C Function**: `ClientDataSet_getValues()`
+
+**Description**: Returns a handle to the underlying MmsValue (MMS_ARRAY) for use with NewGooseSubscriberWithDataSet. The ClientDataSet must remain alive while the subscriber uses it.
+
+---
+
 ### DefineNamedVariableList
 
 **Go Function**: `func (c *Client) DefineNamedVariableList(domainID, listName string, variableSpecs []VariableAccessSpec) error`  
@@ -1885,6 +1921,50 @@ server.SetLocalIpAddress("0.0.0.0")
 
 ---
 
+### EnableGoosePublishing
+
+**Go Function**: `func (is *IedServer) EnableGoosePublishing()`  
+**C Function**: `IedServer_enableGoosePublishing()`
+
+**Description**: Enables GOOSE publishing on the server when using the integrated GOOSE publisher (see ServerConfig.UseIntegratedGoosePublisher).
+
+**Example**:
+```go
+server.SetGooseInterfaceId("eth0")
+server.EnableGoosePublishing()
+server.Start(102)
+```
+
+---
+
+### DisableGoosePublishing
+
+**Go Function**: `func (is *IedServer) DisableGoosePublishing()`  
+**C Function**: `IedServer_disableGoosePublishing()`
+
+**Description**: Disables GOOSE publishing on the server.
+
+**Example**:
+```go
+server.DisableGoosePublishing()
+```
+
+---
+
+### SetGooseInterfaceId
+
+**Go Function**: `func (is *IedServer) SetGooseInterfaceId(interfaceId string)`  
+**C Function**: `IedServer_setGooseInterfaceId()`
+
+**Description**: Sets the Ethernet interface used for GOOSE (e.g. "eth0"). May be called before or after Start.
+
+**Example**:
+```go
+server.SetGooseInterfaceId("eth0")
+```
+
+---
+
 ### SetFilestoreBasepath
 
 **Go Function**: `func (is *IedServer) SetFilestoreBasepath(basepath string)`  
@@ -2317,6 +2397,22 @@ defer subscriber.Destroy()
 
 ---
 
+### NewGooseSubscriberWithDataSet
+
+**Go Function**: `func NewGooseSubscriberWithDataSet(conf SubscriberConf, dataSetValues *GooseDataSetValues) *GooseSubscriber`  
+**C Function**: `GooseSubscriber_create(goCbRef, dataSetValues)`
+
+**Description**: Creates a GOOSE subscriber that writes received data set values into the pre-allocated MmsValue from dataSetValues. Obtain dataSetValues from Client.ReadDataSetValues and ClientDataSet.GooseDataSetValues(); the ClientDataSet must remain alive for the lifetime of the subscriber. Pass nil for dataSetValues to use auto-allocated values (same as NewGooseSubscriber).
+
+**Example**:
+```go
+dataSet, _ := client.ReadDataSetValues("simpleIOGenericIO/LLN0$dataset1")
+defer dataSet.Destroy()
+sub := iec61850.NewGooseSubscriberWithDataSet(conf, &dataSet.GooseDataSetValues())
+```
+
+---
+
 ### SetGooseReceiver
 
 **Go Function**: `func (subscriber *GooseSubscriber) SetGooseReceiver(receiver func(*GooseSubscriber))`  
@@ -2336,6 +2432,21 @@ subscriber.SetGooseReceiver(func(sub *iec61850.GooseSubscriber) {
 
 ---
 
+### SetObserver
+
+**Go Function**: `func (subscriber *GooseSubscriber) SetObserver()`  
+**C Function**: `GooseSubscriber_setObserver()`
+
+**Description**: Configures the subscriber to listen to any received GOOSE message (observer mode). When set, the subscriber still has access to goCbRef, goId, and datSet of the received message.
+
+**Example**:
+```go
+subscriber.SetObserver()
+receiver.AddSubscriber(subscriber)
+```
+
+---
+
 ### Subscribe
 
 **Go Function**: `func (subscriber *GooseSubscriber) Subscribe() error`  
@@ -2350,12 +2461,75 @@ err := subscriber.Subscribe()
 
 ---
 
+### StartThreadless (GooseReceiver)
+
+**Go Function**: `func (receiver *GooseReceiver) StartThreadless() *GooseReceiverSocket`  
+**C Function**: `GooseReceiver_startThreadless()`
+
+**Description**: Starts the GOOSE receiver in non-threaded mode. Returns an opaque socket handle; drive reception by calling HandleMessage with each received Ethernet frame. Call StopThreadless to stop.
+
+**Example**:
+```go
+sock := receiver.StartThreadless()
+if sock != nil {
+    defer receiver.StopThreadless()
+    // Read frames (e.g. from raw socket) and call receiver.HandleMessage(frame)
+}
+```
+
+---
+
+### StopThreadless (GooseReceiver)
+
+**Go Function**: `func (receiver *GooseReceiver) StopThreadless()`  
+**C Function**: `GooseReceiver_stopThreadless()`
+
+**Description**: Stops the receiver when running in threadless mode (after StartThreadless).
+
+**Example**:
+```go
+receiver.StopThreadless()
+```
+
+---
+
+### HandleMessage (GooseReceiver)
+
+**Go Function**: `func (receiver *GooseReceiver) HandleMessage(buffer []byte)`  
+**C Function**: `GooseReceiver_handleMessage()`
+
+**Description**: Parses a GOOSE message from a raw Ethernet frame. Use when driving reception yourself (e.g. with StartThreadless or custom socket reads). buffer must contain the complete Ethernet frame.
+
+**Example**:
+```go
+// After reading frame from socket or elsewhere:
+receiver.HandleMessage(ethernetFrame)
+```
+
+---
+
+### NewGooseReceiverEx (GooseReceiver)
+
+**Go Function**: `func NewGooseReceiverEx(buffer []byte) *GooseReceiver`  
+**C Function**: `GooseReceiver_createEx()`
+
+**Description**: Creates a GOOSE receiver that uses the given buffer for message handling instead of allocating its own. Pass nil or an empty slice for the default buffer. When buffer is non-nil, the receiver keeps a reference for its lifetime.
+
+**Example**:
+```go
+buf := make([]byte, 1500)
+receiver := iec61850.NewGooseReceiverEx(buf)
+defer receiver.Destroy()
+```
+
+---
+
 ### NewGoosePublisher
 
 **Go Function**: `func NewGoosePublisher(conf GoosePublisherConf) (*GoosePublisher, error)`  
-**C Function**: `GoosePublisher_create()`
+**C Function**: `GoosePublisher_create()` (via `NewGoosePublisherEx(conf, true)`)
 
-**Description**: Creates a GOOSE publisher.
+**Description**: Creates a GOOSE publisher with VLAN tags enabled.
 
 **Example**:
 ```go
@@ -2371,6 +2545,20 @@ publisher, err := iec61850.NewGoosePublisher(conf)
 
 ---
 
+### NewGoosePublisherEx
+
+**Go Function**: `func NewGoosePublisherEx(conf GoosePublisherConf, useVlanTag bool) (*GoosePublisher, error)`  
+**C Function**: `GoosePublisher_createEx()`
+
+**Description**: Creates a GOOSE publisher with optional VLAN tag. Set useVlanTag to false to disable VLAN tags in sent frames when not needed.
+
+**Example**:
+```go
+publisher, err := iec61850.NewGoosePublisherEx(conf, false)
+```
+
+---
+
 ### Publish
 
 **Go Function**: `func (publisher *GoosePublisher) Publish(values []*MmsValue) error`  
@@ -2382,6 +2570,74 @@ publisher, err := iec61850.NewGoosePublisher(conf)
 ```go
 vals := []*iec61850.MmsValue{intVal, boolVal}
 err := publisher.Publish(vals)
+```
+
+---
+
+### SetGoID
+
+**Go Function**: `func (publisher *GoosePublisher) SetGoID(goID string)`  
+**C Function**: `GoosePublisher_setGoID()`
+
+**Description**: Sets the GOOSE identifier string sent in GOOSE messages (e.g. when it differs from GoCbRef).
+
+**Example**:
+```go
+publisher.SetGoID("MyDevice/LLN0$GO$gcb1")
+```
+
+---
+
+### PublishAndDump (GoosePublisher)
+
+**Go Function**: `func (publisher *GoosePublisher) PublishAndDump(dataSet *LinkedListValue, msgBuf []byte) (msgLen int, err error)`  
+**C Function**: `GoosePublisher_publishAndDump()`
+
+**Description**: Publishes a GOOSE message and copies the raw encoded payload into msgBuf. Returns the number of bytes written (use msgBuf[:msgLen]). msgBuf must be non-nil and have positive length (e.g. 1500+ bytes).
+
+**Example**:
+```go
+msgBuf := make([]byte, 1500)
+n, err := publisher.PublishAndDump(dataSet, msgBuf)
+if err == nil {
+    rawPayload := msgBuf[:n]
+    // log or inspect rawPayload
+}
+```
+
+---
+
+## GOOSE Control Block (GoCB) Client Functions
+
+### GetGoCBValuesAsync
+
+**Go Function**: `func (c *Client) GetGoCBValuesAsync(goCBReference string, callback func(*ClientGooseControlBlockValues, error)) (uint32, error)`  
+**C Function**: `IedConnection_getGoCBValuesAsync()`
+
+**Description**: Reads GOOSE control block values from the server asynchronously. The callback is invoked with the values and nil error on success, or nil and error on failure. Returns the invoke ID and an error if the request could not be started.
+
+**Example**:
+```go
+invokeID, err := client.GetGoCBValuesAsync("Device/LLN0.gcb1", func(v *iec61850.ClientGooseControlBlockValues, err error) {
+    if err != nil { log.Println(err); return }
+    fmt.Printf("GoEna: %v, GoID: %s\n", v.GoEna, v.GoID)
+})
+```
+
+---
+
+### SetGoCBValuesAsync
+
+**Go Function**: `func (c *Client) SetGoCBValuesAsync(goCBReference string, values *ClientGooseControlBlockValues, parametersMask uint32, singleRequest bool, callback func(error)) (uint32, error)`  
+**C Function**: `IedConnection_setGoCBValuesAsync()`
+
+**Description**: Writes GOOSE control block values to the server asynchronously. The callback is invoked with nil on success or an error on failure. Returns the invoke ID and an error if the request could not be started.
+
+**Example**:
+```go
+invokeID, err := client.SetGoCBValuesAsync("Device/LLN0.gcb1", values, iec61850.GoCBElementDstAddress, false, func(err error) {
+    if err != nil { log.Println(err) }
+})
 ```
 
 ---

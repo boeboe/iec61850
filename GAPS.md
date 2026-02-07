@@ -46,6 +46,49 @@ Coverage for **tag 1.1.0** vs **1.1.1** (current main, to be tagged 1.1.1). 1.1.
 
 **API documentation** (aligned with this analysis): [FUNCTIONS.md](FUNCTIONS.md), [STRUCTS.md](STRUCTS.md), [ENUMS.md](ENUMS.md).
 
+**GOOSE** (Ethernet): ~95% coverage; see [GOOSE API Coverage](#goose-api-coverage-c-library-vs-go-bindings) below and [GOOSE_GAPS.md](GOOSE_GAPS.md).
+
+### Why ReadDataSetValues wasn’t in the 98% count
+
+The **~98%** figure is based on a fixed list of **MMS** functions: `MmsConnection_*`, `MmsValue_*`, and the categories in the table above. That list does **not** include every **IedConnection_** wrapper.
+
+- **IedConnection_readDataSetValues** and **ClientDataSet** (getValues, destroy) are **IedConnection** (ACSI/client) APIs. They sit on top of MMS (they use `MmsConnection_readNamedVariableListValues` under the hood) and were not part of the enumerated “MMS functions” used for the 98% count.
+- The “Named Variable Lists” category in this document (10 functions) covers **directory/define/delete/attributes** (`MmsConnection_readNamedVariableListDirectory`, `defineNamedVariableList`, etc.), not the **read-values** or **data-set** convenience APIs.
+- **ReadDataSetValues** is now implemented: `Client.ReadDataSetValues()`, `ClientDataSet`, `ClientDataSet.GooseDataSetValues()` (see [GOOSE_GAPS.md](GOOSE_GAPS.md) Phase 2 and [FUNCTIONS.md](FUNCTIONS.md)).
+
+So the gap was in the **IedConnection** / client convenience layer, not in the MMS layer that this document was scoped to.
+
+---
+
+## GOOSE API Coverage (C Library vs Go Bindings)
+
+GOOSE bindings are build-tagged `linux && (amd64 || arm64 || arm)`. Full gap analysis and plan: [GOOSE_GAPS.md](GOOSE_GAPS.md).
+
+### Summary
+
+| Area | C API (Ethernet) | Go implemented | Coverage |
+|------|------------------|-----------------|----------|
+| **GoosePublisher** | 17 | 16 | **~94%** |
+| **GooseReceiver** | 14 | 14 | **100%** |
+| **GooseSubscriber** | 19 | 19 | **100%** |
+| **Client GoCB** | 4 | 4 | **100%** |
+| **Server GOOSE** | 6 | 4 | **~67%** |
+| **R-GOOSE** | 2 | 0 | Out of scope |
+
+**Overall GOOSE (Ethernet): ~95%.** Publisher, receiver, subscriber, and client GoCB are production ready. Server: `EnableGoosePublishing`, `DisableGoosePublishing`, `SetGooseInterfaceId` and config `UseIntegratedGoosePublisher` are implemented; per-GCB `SetGooseInterfaceIdEx` and `UseGooseVlanTag` are not bound (require LogicalNode). R-GOOSE (`createRemote`) is out of scope until RSession is bound.
+
+### C → Go quick reference
+
+| C (libiec61850) | Go (iec61850 bindings) |
+|-----------------|------------------------|
+| `goose_publisher.h` | `goose_publisher.go`: NewGoosePublisher, NewGoosePublisherEx, Publish, PublishAndDump, SetGoID, SetGoCbRef, SetTimeAllowedToLive, SetDataSetRef, SetConfRev, SetSimulation, SetStNum/SqNum, SetNeedsCommission, IncreaseStNum, Reset, Close |
+| `goose_receiver.h` | `goose_receiver.go`: NewGooseReceiver, NewGooseReceiverEx, Set/GetInterfaceID, Add/RemoveSubscriber, Start, Stop, IsRunning, StartThreadless, StopThreadless, Tick, HandleMessage, Destroy |
+| `goose_subscriber.h` | `goose_subscriber.go`: NewGooseSubscriber, NewGooseSubscriberWithDataSet, SetObserver, SetDstMac/SetAppId (via conf), getters, GetDataSetValues, SetListener (via receiver), Destroy |
+| `iec61850_client.h` (GoCB) | `client_gocb.go`: GetGoCBValues, GetGoCBValuesAsync, SetGoCBValues, SetGoCBValuesAsync; ClientGooseControlBlockValues |
+| `iec61850_server.h` (GOOSE) | `server.go`: EnableGoosePublishing, DisableGoosePublishing, SetGooseInterfaceId; `server_config.go`: UseIntegratedGoosePublisher |
+
+See [GOOSE_GAPS.md](GOOSE_GAPS.md) for function-level tables, structs/enums, and the implementation checklist.
+
 ---
 
 ## Part 1: MMS Client Connection Functions
@@ -227,6 +270,8 @@ func (c *Client) WriteNamedVariableList(
 | `MmsConnection_readNamedVariableListDirectoryAssociationSpecific()` | ✅ `ReadNamedVariableListDirectoryAssociationSpecific()` | client_mms.go | Complete |
 
 **Coverage: 10/10 (100%)** ✅
+
+**Verified:** All 10 are implemented (define, defineAsync, defineAssociationSpecific, delete, deleteAssociationSpecific, getAttributes, getAttributesAsync, readDirectory, readDirectoryAsync, readDirectoryAssociationSpecific). In addition, **read values** (not in the table) are implemented: `Client.ReadNamedVariableListValues`, `Client.ReadNamedVariableListValuesAssociationSpecific`, `MmsConnection.ReadNamedVariableListValues`, `MmsConnection.ReadNamedVariableListValuesAsync`.
 
 ---
 

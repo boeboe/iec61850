@@ -294,6 +294,57 @@ func (c *Client) ReadNamedVariableListValuesAssociationSpecific(listName string,
 	return toGoStructure(result, Array)
 }
 
+// ClientDataSet holds data set values read from the server. Create with ReadDataSetValues; call Destroy when done.
+// The underlying MmsValue (MMS_ARRAY) can be passed to NewGooseSubscriberWithDataSet for GOOSE; keep the
+// ClientDataSet alive for the lifetime of that subscriber.
+type ClientDataSet struct {
+	c C.ClientDataSet
+}
+
+// ReadDataSetValues reads the data set values from the server. dataSetReference is the object reference
+// (e.g. "LD/LN.dsName" or "@asName"). Pass nil for existing to create a new container; pass an existing
+// *ClientDataSet to update it in place.
+func (c *Client) ReadDataSetValues(dataSetReference string) (*ClientDataSet, error) {
+	if c.conn == nil {
+		return nil, NotConnected
+	}
+	ref, freeRef := allocCString(dataSetReference)
+	defer freeRef()
+	var cErr C.IedClientError
+	ds := C.IedConnection_readDataSetValues(c.conn, &cErr, ref, nil)
+	if err := GetIedClientError(cErr); err != nil {
+		return nil, err
+	}
+	if ds == nil {
+		return nil, nil
+	}
+	return &ClientDataSet{c: ds}, nil
+}
+
+// Destroy frees the ClientDataSet. Do not use it or any GooseDataSetValues derived from it after Destroy.
+func (d *ClientDataSet) Destroy() {
+	if d != nil && d.c != nil {
+		C.ClientDataSet_destroy(d.c)
+		d.c = nil
+	}
+}
+
+// GooseDataSetValues returns a handle to the underlying MmsValue (MMS_ARRAY) for use with
+// NewGooseSubscriberWithDataSet. The ClientDataSet must remain alive while the subscriber uses it.
+func (d *ClientDataSet) GooseDataSetValues() GooseDataSetValues {
+	if d == nil || d.c == nil {
+		return GooseDataSetValues{}
+	}
+	return GooseDataSetValues{p: unsafe.Pointer(C.ClientDataSet_getValues(d.c))}
+}
+
+// GooseDataSetValues is an opaque handle to the MmsValue array from a ClientDataSet, for use with
+// NewGooseSubscriberWithDataSet. Obtain it from ClientDataSet.GooseDataSetValues(); keep the
+// ClientDataSet alive for the lifetime of the subscriber.
+type GooseDataSetValues struct {
+	p unsafe.Pointer
+}
+
 // ReadNamedVariableListDirectory returns the directory (list of variable references) and whether the list is deletable.
 func (c *Client) ReadNamedVariableListDirectory(domainID, listName string) (entries []VariableListEntry, deletable bool, err error) {
 	var cDomain *C.char
@@ -624,6 +675,7 @@ func (c *Client) ReadJournalStartAfter(domainID, itemID string, timeSpecificatio
 	timeV := C.MmsValue_newBinaryTime(C.bool(false))
 	defer C.MmsValue_delete(timeV)
 	C.MmsValue_setBinaryTime(timeV, C.uint64_t(timeSpecificationMs))
+	// C library requires non-NULL entrySpecification (it calls MmsValue_getType on it).
 	var entryV *C.MmsValue
 	if len(entrySpecification) > 0 {
 		entryV = C.MmsValue_newOctetString(C.int(len(entrySpecification)), C.int(len(entrySpecification)))
@@ -631,6 +683,9 @@ func (c *Client) ReadJournalStartAfter(domainID, itemID string, timeSpecificatio
 		for i, b := range entrySpecification {
 			C.MmsValue_setOctetStringOctet(entryV, C.int(i), C.uint8_t(b))
 		}
+	} else {
+		entryV = C.MmsValue_newOctetString(0, 0)
+		defer C.MmsValue_delete(entryV)
 	}
 	var cMore C.bool
 	var cError C.MmsError

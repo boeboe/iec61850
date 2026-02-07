@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.3] - 2026-02-15
+
+### Added
+
+- **GOOSE – publisher**
+  - `CommParameters` – named Go struct (VlanPriority, VlanID, AppID, DstAddr) matching C `struct sCommParameters`; embedded in `GoosePublisherConf` so existing config literals remain valid
+  - `NewGoosePublisherEx(conf, useVlanTag)` – create publisher with optional VLAN tag
+  - `SetGoID(goID)` – set GOOSE identifier in messages
+  - `PublishAndDump(dataSet, msgBuf)` – publish and copy raw payload into buffer
+- **GOOSE – receiver**
+  - `NewGooseReceiverEx(buffer)` – receiver using provided buffer for message handling
+  - `StartThreadless()` / `StopThreadless()` – non-threaded operation with external read loop
+  - `HandleMessage(buffer)` – parse GOOSE from raw Ethernet frame
+- **GOOSE – subscriber**
+  - `SetObserver()` – listen to any received GOOSE message
+  - `NewGooseSubscriberWithDataSet(conf, dataSetValues)` – subscriber writing into pre-allocated data set (e.g. from `Client.ReadDataSetValues` + `ClientDataSet.GooseDataSetValues()`)
+- **Client – GOOSE and data sets**
+  - `ReadDataSetValues(dataSetReference)` – returns `*ClientDataSet`; call `Destroy()` when done
+  - `ClientDataSet.GooseDataSetValues()` – returns `*GooseDataSetValues` for use with `NewGooseSubscriberWithDataSet`
+  - `GetGoCBValuesAsync(goCBReference, callback)` / `SetGoCBValuesAsync(goCBReference, values, ...)` – async GoCB read/write
+- **Server – GOOSE**
+  - `EnableGoosePublishing()` / `DisableGoosePublishing()` – enable/disable integrated GOOSE publisher
+  - `SetGooseInterfaceId(interfaceId)` – set Ethernet interface for GOOSE (e.g. `"eth0"`)
+
+### Changed
+
+- **Documentation**
+  - GAPS.md – new “GOOSE API coverage” section (summary table, C→Go quick reference, link to GOOSE_GAPS.md)
+  - GOOSE_GAPS.md – new file: GOOSE gap analysis and plan; executive summary and Part 1/2 (~95% Ethernet GOOSE coverage, structs/enums 100%)
+  - STRUCTS.md – GOOSE section: CommParameters, GoosePublisherConf (embedding), ClientGooseControlBlock (opaque), ClientGooseControlBlockValues
+  - FUNCTIONS.md, ENUMS.md – GOOSE-related entries added/updated
+
+---
+
 ## [1.1.1] - 2026-02-07
 
 ### Added

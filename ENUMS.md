@@ -643,6 +643,37 @@ if !sub.IsValid() {
 
 ---
 
+### GoCB element constants (parameters mask)
+
+**Go Type**: `const` (e.g. `GoCBElementGoEna`, `GoCBElementAll`)  
+**C Type**: `GOCB_ELEMENT_*` macros in `iec61850_client.h`
+
+**Description**: Bit masks for GetGoCBValues/SetGoCBValues `parametersMask` to select which GoCB elements to read or write.
+
+**Values**:
+
+| Constant | Value | C Equivalent | Description |
+|----------|-------|-------------|-------------|
+| `GoCBElementGoEna` | 1 | `GOCB_ELEMENT_GO_ENA` | Go enable |
+| `GoCBElementGoID` | 2 | `GOCB_ELEMENT_GO_ID` | GoID |
+| `GoCBElementDatSet` | 4 | `GOCB_ELEMENT_DATSET` | Data set reference |
+| `GoCBElementConfRev` | 8 | `GOCB_ELEMENT_CONF_REV` | Configuration revision |
+| `GoCBElementNdsComm` | 16 | `GOCB_ELEMENT_NDS_COMM` | Needs commission |
+| `GoCBElementDstAddress` | 32 | `GOCB_ELEMENT_DST_ADDRESS` | Destination address |
+| `GoCBElementMinTime` | 64 | `GOCB_ELEMENT_MIN_TIME` | Min time |
+| `GoCBElementMaxTime` | 128 | `GOCB_ELEMENT_MAX_TIME` | Max time |
+| `GoCBElementFixedOffs` | 256 | `GOCB_ELEMENT_FIXED_OFFS` | Fixed offset |
+| `GoCBElementAll` | 511 | `GOCB_ELEMENT_ALL` | All elements |
+
+**Example**:
+```go
+vals, err := client.GetGoCBValues("Device/LLN0$GO$gcb1")
+// Set only destination address
+err = client.SetGoCBValues("Device/LLN0$GO$gcb1", newVals, iec61850.GoCBElementDstAddress, false)
+```
+
+---
+
 ## Authentication & Security
 
 ### AcseAuthenticationMechanism

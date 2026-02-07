@@ -254,6 +254,23 @@ func (is *IedServer) SetMmsLocalIpAddress(localIpAddress string) error {
 	return nil
 }
 
+// EnableGoosePublishing enables GOOSE publishing on the server (when using integrated GOOSE publisher).
+func (is *IedServer) EnableGoosePublishing() {
+	C.IedServer_enableGoosePublishing(is.server)
+}
+
+// DisableGoosePublishing disables GOOSE publishing on the server.
+func (is *IedServer) DisableGoosePublishing() {
+	C.IedServer_disableGoosePublishing(is.server)
+}
+
+// SetGooseInterfaceId sets the Ethernet interface used for GOOSE (e.g. "eth0"). Call before or after Start.
+func (is *IedServer) SetGooseInterfaceId(interfaceId string) {
+	cIf, freeCIf := allocCString(interfaceId)
+	defer freeCIf()
+	C.IedServer_setGooseInterfaceId(is.server, cIf)
+}
+
 // SetMmsTcpPort is not supported by the library; the TCP port is set when calling Start(port).
 func (is *IedServer) SetMmsTcpPort(tcpPort int) error {
 	_ = tcpPort

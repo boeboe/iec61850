@@ -101,6 +101,38 @@ if lastErr.Error != 0 {
 
 ---
 
+### ClientDataSet
+
+**Go Type**: `type ClientDataSet struct` (opaque)  
+**C Type**: `ClientDataSet`
+
+**Description**: Holds data set values read from the server via ReadDataSetValues. Call Destroy when done. The underlying MmsValue (MMS_ARRAY) can be passed to NewGooseSubscriberWithDataSet via GooseDataSetValues(); keep the ClientDataSet alive for the lifetime of that subscriber.
+
+**Example**:
+```go
+dataSet, err := client.ReadDataSetValues("simpleIOGenericIO/LLN0$dataset1")
+if err != nil { log.Fatal(err) }
+defer dataSet.Destroy()
+sub := iec61850.NewGooseSubscriberWithDataSet(conf, &dataSet.GooseDataSetValues())
+```
+
+---
+
+### GooseDataSetValues
+
+**Go Type**: `type GooseDataSetValues struct` (opaque; field `p unsafe.Pointer`)  
+**C Type**: Wraps `MmsValue*` from `ClientDataSet_getValues()`
+
+**Description**: Opaque handle to the MmsValue array from a ClientDataSet, for use with NewGooseSubscriberWithDataSet. Obtain from ClientDataSet.GooseDataSetValues(); keep the ClientDataSet alive for the lifetime of the subscriber.
+
+**Example**:
+```go
+gooseVals := dataSet.GooseDataSetValues()
+sub := iec61850.NewGooseSubscriberWithDataSet(conf, &gooseVals)
+```
+
+---
+
 ### IedConnectionState
 
 **Go Type**: `type IedConnectionState int`
@@ -1287,6 +1319,54 @@ client.InstallReportHandler("Device/LLN0.BR.brcb01", handler, nil)
 
 ## GOOSE Types
 
+### CommParameters
+
+**Go Type**:
+```go
+type CommParameters struct {
+    VlanPriority uint8
+    VlanID       uint16
+    AppID        uint16
+    DstAddr      [6]uint8
+}
+```
+
+**C Type**: `struct sCommParameters` (in libiec61850 `goose_publisher.h`: `vlanPriority`, `vlanId`, `appId`, `dstAddress[6]`).
+
+**Description**: GOOSE/SV communication parameters (VLAN, APPID, destination MAC). This is the explicit Go equivalent of the C struct. It is embedded in **GoosePublisherConf**; when creating a publisher you can set fields either on the embedded struct or as promoted fields on the conf (e.g. `conf.AppID`, `conf.DstAddr`).
+
+**Example**:
+```go
+params := iec61850.CommParameters{
+    VlanPriority: 4,
+    VlanID:       0,
+    AppID:        0x1000,
+    DstAddr:      [6]uint8{0x01, 0x0c, 0xcd, 0x01, 0x00, 0x01},
+}
+conf := iec61850.GoosePublisherConf{InterfaceID: "eth0", CommParameters: params}
+pub, _ := iec61850.NewGoosePublisher(conf)
+```
+
+---
+
+### GooseReceiverSocket
+
+**Go Type**: `type GooseReceiverSocket struct` (opaque)  
+**C Type**: `EthernetSocket`
+
+**Description**: Opaque handle returned by GooseReceiver.StartThreadless(). Represents the Ethernet socket used for receiving; drive reception by calling HandleMessage with each received frame.
+
+**Example**:
+```go
+sock := receiver.StartThreadless()
+if sock != nil {
+    defer receiver.StopThreadless()
+    receiver.HandleMessage(ethernetFrame)
+}
+```
+
+---
+
 ### GooseSubscriber
 
 **Go Type**: `type GooseSubscriber struct` (opaque)  
@@ -1370,29 +1450,62 @@ receiver.AddSubscriber(sub)
 ```go
 type GoosePublisherConf struct {
     InterfaceID string
-    AppID       int32
-    GoID        string
-    GoCbRef     string
-    DataSetRef  string
-    ConfRev     uint32
+    CommParameters  // embedded: VlanPriority, VlanID, AppID, DstAddr are promoted
 }
 ```
 
-**C Type**: N/A
+**C Type**: Interface name (e.g. `"eth0"`) plus `struct sCommParameters` (see **CommParameters**). The C API takes `CommParameters*` and `const char* interfaceID`; in Go both are in one struct.
 
-**Description**: GOOSE publisher configuration.
+**Description**: GOOSE publisher configuration. Embeds **CommParameters**; you can set `InterfaceID` and the promoted fields (e.g. `AppID`, `VlanID`, `DstAddr`, `VlanPriority`) directly.
 
 **Example**:
 ```go
 conf := iec61850.GoosePublisherConf{
-    InterfaceID: "eth0",
-    AppID:       1000,
-    GoID:        "MyPublisher",
-    GoCbRef:     "Device/LLN0$GO$gcb1",
-    DataSetRef:  "Device/LLN0$dataset1",
+    InterfaceID:  "eth0",
+    AppID:       0x1000,
+    VlanID:       0,
+    VlanPriority: 4,
+    DstAddr:      [6]uint8{0x01, 0x0c, 0xcd, 0x01, 0x00, 0x01},
 }
 pub, _ := iec61850.NewGoosePublisher(conf)
+// Optional: pub.SetGoID("MyPublisher"); pub.SetGoCbRef("Device/LLN0$GO$gcb1"); ...
 ```
+
+---
+
+### ClientGooseControlBlock (opaque)
+
+**C Type**: `ClientGooseControlBlock` (opaque handle in `iec61850_client.h`).
+
+**Go**: There is no public Go handle. The C type is used only inside the bindings. To read or write GOOSE control block values from the client, use:
+
+- **GetGoCBValues** / **GetGoCBValuesAsync** – return or pass **ClientGooseControlBlockValues**
+- **SetGoCBValues** / **SetGoCBValuesAsync** – accept **ClientGooseControlBlockValues** and parameters mask
+
+See **ClientGooseControlBlockValues** below and [FUNCTIONS.md](FUNCTIONS.md) for GetGoCBValues, SetGoCBValues, and the async variants.
+
+---
+
+### ClientGooseControlBlockValues
+
+**Go Type**:
+```go
+type ClientGooseControlBlockValues struct {
+    GoEna      bool
+    GoID       string
+    DatSet     string
+    ConfRev    uint32
+    NdsComm    bool
+    MinTime    uint32
+    MaxTime    uint32
+    FixedOffs  bool
+    DstAddress PhyComAddress
+}
+```
+
+**C Type**: Values read from / written to `ClientGooseControlBlock` via the client API.
+
+**Description**: Holds GOOSE control block attributes. Use with **GetGoCBValues** / **GetGoCBValuesAsync** (to read) and **SetGoCBValues** / **SetGoCBValuesAsync** (to write). **PhyComAddress** holds destination MAC, VLAN priority, VLAN ID, and APPID.
 
 ---
 

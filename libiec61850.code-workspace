@@ -5,6 +5,9 @@
 		},
 		{
 			"path": "."
+		},
+		{
+			"path": "../../pratexo/iec61850ctl"
 		}
 	],
 	"settings": {

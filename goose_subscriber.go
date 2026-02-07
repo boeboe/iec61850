@@ -7,9 +7,12 @@ package iec61850
 #include "goose_subscriber.h"
 #include <stdint.h>
 
-// 创建 goose 订阅对象
 static GooseSubscriber create_simple_goose_subscriber(char *goCbRef) {
 	return GooseSubscriber_create(goCbRef, NULL);
+}
+
+static GooseSubscriber create_goose_subscriber_with_dataset(char *goCbRef, MmsValue *dataSetValues) {
+	return GooseSubscriber_create(goCbRef, dataSetValues);
 }
 */
 import "C"
@@ -40,10 +43,28 @@ type (
 )
 
 func NewGooseSubscriber(conf SubscriberConf) (subscriber *GooseSubscriber) {
+	return newGooseSubscriberWithDataSet(conf, nil)
+}
+
+// NewGooseSubscriberWithDataSet creates a GOOSE subscriber that writes received data set values
+// into the pre-allocated MmsValue from dataSetValues. Obtain dataSetValues from
+// Client.ReadDataSetValues and ClientDataSet.GooseDataSetValues(); the ClientDataSet must
+// remain alive for the lifetime of the subscriber. Pass nil for dataSetValues to use
+// auto-allocated values (same as NewGooseSubscriber).
+func NewGooseSubscriberWithDataSet(conf SubscriberConf, dataSetValues *GooseDataSetValues) (subscriber *GooseSubscriber) {
+	return newGooseSubscriberWithDataSet(conf, dataSetValues)
+}
+
+func newGooseSubscriberWithDataSet(conf SubscriberConf, dataSetValues *GooseDataSetValues) (subscriber *GooseSubscriber) {
 	goCbRef, freeGoCbRef := allocCString(conf.Subscriber)
 	defer freeGoCbRef()
 
-	cSubscriber := C.create_simple_goose_subscriber(goCbRef)
+	var cSubscriber *C.struct_sGooseSubscriber
+	if dataSetValues != nil && dataSetValues.p != nil {
+		cSubscriber = C.create_goose_subscriber_with_dataset(goCbRef, (*C.MmsValue)(dataSetValues.p))
+	} else {
+		cSubscriber = C.create_simple_goose_subscriber(goCbRef)
+	}
 	C.GooseSubscriber_setDstMac(cSubscriber, (*C.uint8_t)(unsafe.Pointer(&conf.DstMacAddr[0])))
 	C.GooseSubscriber_setAppId(cSubscriber, C.uint16_t(conf.AppID))
 	newID := GooseCallbackHandlerID(gooseCallbackLocker.idOffset.Add(1))
@@ -151,6 +172,12 @@ func (receiver *GooseSubscriber) GetVlanID() uint16 {
 
 func (receiver *GooseSubscriber) GetVlanPriority() uint8 {
 	return uint8(C.GooseSubscriber_getVlanPrio(receiver.subscriber))
+}
+
+// SetObserver configures the subscriber to listen to any received GOOSE message (observer mode).
+// When set, the subscriber still has access to goCbRef, goId, and datSet of the received message.
+func (receiver *GooseSubscriber) SetObserver() {
+	C.GooseSubscriber_setObserver(receiver.subscriber)
 }
 
 func (receiver *GooseSubscriber) GetDataSetValues() (*MmsValue, error) {

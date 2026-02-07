@@ -25,10 +25,18 @@ import (
 )
 
 type (
+	// GooseReceiverSocket is the opaque handle returned by StartThreadless.
+	// It represents the Ethernet socket used for receiving; the receiver parses
+	// frames when you call HandleMessage with a buffer.
+	GooseReceiverSocket struct {
+		c C.EthernetSocket
+	}
+
 	GooseReceiver struct {
 		noCopy        struct{}
 		gooseReceiver *C.struct_sGooseReceiver
 		refs          map[GooseCallbackHandlerID]struct{}
+		keepBuffer    []byte // optional buffer passed to createEx; keep alive for receiver lifetime
 	}
 )
 
@@ -70,9 +78,30 @@ func cgoReportCallbackBridgeDispatcher(_ *C.struct_sGooseSubscriber, parameter u
 }
 
 func NewGooseReceiver() *GooseReceiver {
+	return newGooseReceiverWithBuffer(nil)
+}
+
+// NewGooseReceiverEx creates a GOOSE receiver that uses the given buffer for message handling
+// instead of allocating its own. Pass nil or an empty slice to use the default (library-allocated) buffer.
+// When buffer is non-nil, the receiver keeps a reference to it for its lifetime; do not modify
+// the buffer while the receiver is in use.
+func NewGooseReceiverEx(buffer []byte) *GooseReceiver {
+	return newGooseReceiverWithBuffer(buffer)
+}
+
+func newGooseReceiverWithBuffer(buffer []byte) *GooseReceiver {
+	var cReceiver *C.struct_sGooseReceiver
+	var keepBuf []byte
+	if len(buffer) > 0 {
+		cReceiver = C.GooseReceiver_createEx((*C.uint8_t)(unsafe.Pointer(&buffer[0])))
+		keepBuf = buffer
+	} else {
+		cReceiver = C.GooseReceiver_create()
+	}
 	return &GooseReceiver{
-		gooseReceiver: C.GooseReceiver_create(),
+		gooseReceiver: cReceiver,
 		refs:          make(map[GooseCallbackHandlerID]struct{}),
+		keepBuffer:    keepBuf,
 	}
 }
 
@@ -134,6 +163,32 @@ func (receiver *GooseReceiver) Tick() bool {
 	return bool(C.GooseReceiver_tick(receiver.gooseReceiver))
 }
 
+// StartThreadless starts the GOOSE receiver in non-threaded mode. The returned socket
+// handle can be used with external read loops; call HandleMessage with each received
+// Ethernet frame. Call StopThreadless to stop.
+func (receiver *GooseReceiver) StartThreadless() *GooseReceiverSocket {
+	sock := C.GooseReceiver_startThreadless(receiver.gooseReceiver)
+	if sock == nil {
+		return nil
+	}
+	return &GooseReceiverSocket{c: sock}
+}
+
+// StopThreadless stops the receiver when running in threadless mode (after StartThreadless).
+func (receiver *GooseReceiver) StopThreadless() {
+	C.GooseReceiver_stopThreadless(receiver.gooseReceiver)
+}
+
+// HandleMessage parses a GOOSE message from a raw Ethernet frame. Use this when driving
+// reception yourself (e.g. with StartThreadless or custom socket reads). buffer must
+// contain the complete Ethernet frame.
+func (receiver *GooseReceiver) HandleMessage(buffer []byte) {
+	if len(buffer) == 0 {
+		return
+	}
+	C.GooseReceiver_handleMessage(receiver.gooseReceiver, (*C.uint8_t)(unsafe.Pointer(&buffer[0])), C.int(len(buffer)))
+}
+
 func (receiver *GooseReceiver) Stop() *GooseReceiver {
 	C.GooseReceiver_stop(receiver.gooseReceiver)
 
@@ -149,4 +204,5 @@ func (receiver *GooseReceiver) Destroy() {
 	C.GooseReceiver_destroy(receiver.gooseReceiver)
 	receiver.refs = nil
 	receiver.gooseReceiver = nil
+	receiver.keepBuffer = nil
 }
