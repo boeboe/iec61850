@@ -5,6 +5,65 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] - 2026-02-07
+
+### Added
+
+- **Client – deferred connect and auth**
+  - `NewClientWithoutConnect()` / `NewClientWithoutConnectWithTls()` – create client without connecting
+  - `ConnectWithAuth(hostname, port, username, password)` – connect with ACSE password authentication
+  - `ConnectAsync(hostname, port, callback)` – non-blocking connect with completion callback
+- **Client – file and MMS**
+  - `GetFileDirectoryExEntries()` – file directory as `[]MmsFileDirectoryEntryEx` (Filename, FileSize, LastModifiedTime, FileAttributes)
+  - `Write()` accepts `*MmsValueRef` for pass-through values (no double-free)
+- **Low-level MMS client** (`mms_connection.go`, `client_mms.go`)
+  - `MmsConnection` – create, connect (sync/async), TLS, timeouts, disconnect/abort/conclude
+  - ISO and MMS connection parameters: `IsoConnectionParameters`, `MmsConnectionParameters`, getters/setters
+  - `SetRawMessageHandler()`, `SetConnectionLostHandler()`, `SetInformationReportHandler()`, `SetFilestoreBasepath()`
+  - Full MMS client operations: read, write, get variable list, get name list, file services, journal client
+- **MmsValue and type system** (`mms_value.go`, `mms_type_spec.go`, `types.go`)
+  - `MmsValue` / `MmsValueRef` – structured MMS values with constructors, getters, setters
+  - `MmsType`, `MmsDataAccessError`, bit-string and octet-string helpers, array/structure ops
+  - `MmsTypeSpec` and type specification types for structured data
+  - `CMmsValueToMmsValue()` – convert C `MmsValue*` to Go `*MmsValue`
+  - `toGoValue()` returns `MmsDataAccessError` for DataAccessError type
+- **Errors**
+  - `GetMmsError()` – map C `MmsError` to Go errors for low-level MMS APIs
+- **Server – connection and threadless**
+  - `ClientConnection` – `PeerAddress()`, `LocalAddress()`, `SecurityToken()`, `Abort()`, `ClaimOwnership()`, `Release()`
+  - `ConnectionIndicationHandler` and `SetConnectionIndicationHandler()` – connect/disconnect callbacks
+  - `StartThreadless(port)`, `StopThreadless()`, `WaitReady(timeoutMs)`, `ProcessIncomingData()`, `PerformPeriodicTasks()`
+- **Server – handlers and logging** (`server_handler.go`, `server_logging.go`)
+  - Write access and control handlers, ACSE authenticator bridge, connection indication bridge
+  - `LogStorageRef`, `NewLogStorageRef()`, `SetMaxLogEntries()`, logging API support
+- **Server – MMS configuration and handlers** (`server_mms.go`, `shim.c`)
+  - `SetFileAccessHandler()`, `InstallVariableListAccessHandler()`
+  - `InstallReadJournalHandler()`, `InstallGetNameListHandler()`, `InstallObtainFileHandler()`, `InstallGetFileCompleteHandler()` (via C shim)
+  - `SetMaxMmsConnections()`, `SetMaxConnections()`, `SetMaxMmsPduSize()`, `GetMaxMmsPduSize()`
+  - `EnableMmsFileService()`, `EnableDynamicNamedVariableLists()`
+  - `SetMaxAssociationSpecificDataSets()`, `SetMaxDomainSpecificDataSets()`, `SetMaxDataSetEntries()`, `EnableJournalService()`
+  - `SetFilestoreBasepath()`, `GetFilestoreBasepath()`, `MmsServerConnection`
+- **Documentation**
+  - `GAPS.md` – MMS function coverage analysis (~98% coverage, client 100%)
+  - `FUNCTIONS.md`, `STRUCTS.md`, `ENUMS.md` – API reference docs
+
+### Changed
+
+- GitHub Actions workflow (`build-libraries.yml`) updated for extra-functions branch
+- `file_callback.c` replaced by `shim.c` (IedConnection getFile + MmsServer install* handler shims)
+
+### Fixed
+
+- **CGo memory management** – Fixed compilation warnings with Go 1.17+ strict type checking
+  - Added `allocCString()` helper – allocator pattern for `C.CString()` with automatic cleanup
+  - Added `allocCMalloc()` helper – allocator pattern for `C.malloc()` with automatic cleanup
+  - Added `allocGo2CStr()` helper – allocator pattern for GB18030-encoded C strings with automatic cleanup
+  - Replaced 174+ instances of `C.free(unsafe.Pointer(...))` across all Go files
+  - Pattern: `cStr, free := allocCString("hello"); defer free()` eliminates unsafe pointer warnings
+- **Type visibility** – Added CGo imports to `types.go` to resolve `MmsVariableSpecificationRef` undefined errors in language server
+
+---
+
 ## [1.1.0] - 2026-02-01
 
 ### Breaking Changes
@@ -125,5 +184,6 @@ This project follows [Semantic Versioning](https://semver.org/):
 - [Releases](https://github.com/boeboe/iec61850/releases)
 - [libiec61850 Upstream](https://github.com/mz-automation/libiec61850)
 
+[1.1.1]: https://github.com/boeboe/iec61850/releases/tag/v1.1.1
 [1.1.0]: https://github.com/boeboe/iec61850/releases/tag/v1.1.0
 [1.0.13]: https://github.com/boeboe/iec61850/releases/tag/v1.0.13

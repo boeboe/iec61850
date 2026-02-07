@@ -157,8 +157,8 @@ func (r *MmsVariableSpecificationRef) GetChildSpecificationByName(name string) *
 	if r == nil || r.c == nil {
 		return nil
 	}
-	cs := C.CString(name)
-	defer C.free(unsafe.Pointer(cs))
+	cs, freecs := allocCString(name)
+	defer freecs()
 	child := C.MmsVariableSpecification_getChildSpecificationByName(r.c, cs, nil)
 	if child == nil {
 		return nil
@@ -191,8 +191,8 @@ func (r *MmsVariableSpecificationRef) GetChildValue(value *MmsValueRef, childId 
 	if r == nil || r.c == nil || value == nil || value.c == nil {
 		return nil
 	}
-	cChild := C.CString(childId)
-	defer C.free(unsafe.Pointer(cChild))
+	cChild, freecChild := allocCString(childId)
+	defer freecChild()
 	el := C.MmsVariableSpecification_getChildValue(r.c, value.c, cChild)
 	if el == nil {
 		return nil
@@ -205,8 +205,8 @@ func (r *MmsVariableSpecificationRef) GetNamedVariableRecursive(nameId string) *
 	if r == nil || r.c == nil {
 		return nil
 	}
-	cName := C.CString(nameId)
-	defer C.free(unsafe.Pointer(cName))
+	cName, freecName := allocCString(nameId)
+	defer freecName()
 	child := C.MmsVariableSpecification_getNamedVariableRecursive(r.c, cName)
 	if child == nil {
 		return nil
@@ -248,9 +248,10 @@ func (r *MmsVariableSpecificationRef) GetStructureElements() []string {
 // Name may be empty. For MMS_BOOLEAN and other types with no size, pass 0.
 func NewMmsVariableSpecification(typ MmsType, name string, size int) *MmsVariableSpecificationRef {
 	var cName *C.char
+	var freeCName func()
 	if name != "" {
-		cName = C.CString(name)
-		defer C.free(unsafe.Pointer(cName))
+		cName, freeCName = allocCString(name)
+		defer freeCName()
 	}
 	c := C.goMmsVarSpecCreateSimple(C.MmsType(typ), cName, C.int(size))
 	if c == nil {
@@ -267,18 +268,19 @@ func CreateStructure(name string, elements []*MmsVariableSpecificationRef) *MmsV
 		return nil
 	}
 	n := C.size_t(len(elements)) * C.size_t(unsafe.Sizeof(uintptr(0)))
-	cArr := C.malloc(n)
-	defer C.free(cArr)
-	base := (*[1 << 20]*C.MmsVariableSpecification)(unsafe.Pointer(cArr))
+	cArr, freeCArr := allocCMalloc(n)
+	defer freeCArr()
+	base := (*[1 << 20]*C.MmsVariableSpecification)(cArr)
 	for i, el := range elements {
 		if el != nil && el.c != nil {
 			base[i] = el.c
 		}
 	}
 	var cName *C.char
+	var freeCName func()
 	if name != "" {
-		cName = C.CString(name)
-		defer C.free(unsafe.Pointer(cName))
+		cName, freeCName = allocCString(name)
+		defer freeCName()
 	}
 	c := C.goMmsVarSpecCreateStructure(cName, (**C.MmsVariableSpecification)(cArr), C.int(len(elements)))
 	if c == nil {
@@ -300,9 +302,10 @@ func CreateArray(name string, elementType *MmsVariableSpecificationRef, elementC
 		return nil
 	}
 	var cName *C.char
+	var freeCName func()
 	if name != "" {
-		cName = C.CString(name)
-		defer C.free(unsafe.Pointer(cName))
+		cName, freeCName = allocCString(name)
+		defer freeCName()
 	}
 	c := C.goMmsVarSpecCreateArray(cName, elementType.c, C.int(elementCount))
 	if c == nil {

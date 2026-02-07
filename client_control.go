@@ -2,7 +2,6 @@ package iec61850
 
 // #include <iec61850_client.h>
 import "C"
-import "unsafe"
 
 type ControlObjectParam struct {
 	CtlVal      bool
@@ -70,8 +69,8 @@ func (c *Client) ControlForDirectWithNormalSecurity(objectRef string, ctlVal boo
 }
 
 func (c *Client) ControlByControlModelINC(objectRef string, controlModel ControlModel, param *ControlObjectParamINC) error {
-	cObjectRef := C.CString(objectRef)
-	defer C.free(unsafe.Pointer(cObjectRef))
+	cObjectRef, freeCObjectRef := allocCString(objectRef)
+	defer freeCObjectRef()
 
 	control := C.ControlObjectClient_create(cObjectRef, c.conn)
 	if control == nil {
@@ -96,9 +95,10 @@ func (c *Client) ControlByControlModelINC(objectRef string, controlModel Control
 	}
 
 	var cOrIdent *C.char
+	var freeCOrIdent func()
 	if param.OrIdent != "" {
-		cOrIdent = C.CString(param.OrIdent)
-		defer C.free(unsafe.Pointer(cOrIdent))
+		cOrIdent, freeCOrIdent = allocCString(param.OrIdent)
+		defer freeCOrIdent()
 	}
 
 	C.ControlObjectClient_setControlModel(control, C.ControlModel(controlModel))
@@ -114,8 +114,8 @@ func (c *Client) ControlByControlModelINC(objectRef string, controlModel Control
 }
 
 func (c *Client) ControlByControlModelAPC(objectRef string, controlModel ControlModel, param *ControlObjectParamAPC) error {
-	cObjectRef := C.CString(objectRef)
-	defer C.free(unsafe.Pointer(cObjectRef))
+	cObjectRef, freeCObjectRef := allocCString(objectRef)
+	defer freeCObjectRef()
 
 	control := C.ControlObjectClient_create(cObjectRef, c.conn)
 	if control == nil {
@@ -140,9 +140,10 @@ func (c *Client) ControlByControlModelAPC(objectRef string, controlModel Control
 	}
 
 	var cOrIdent *C.char
+	var freeCOrIdent func()
 	if param.OrIdent != "" {
-		cOrIdent = C.CString(param.OrIdent)
-		defer C.free(unsafe.Pointer(cOrIdent))
+		cOrIdent, freeCOrIdent = allocCString(param.OrIdent)
+		defer freeCOrIdent()
 	}
 
 	C.ControlObjectClient_setControlModel(control, C.ControlModel(controlModel))
@@ -158,8 +159,8 @@ func (c *Client) ControlByControlModelAPC(objectRef string, controlModel Control
 }
 
 func (c *Client) ControlByControlModel(objectRef string, controlModel ControlModel, param *ControlObjectParam) error {
-	cObjectRef := C.CString(objectRef)
-	defer C.free(unsafe.Pointer(cObjectRef))
+	cObjectRef, freeCObjectRef := allocCString(objectRef)
+	defer freeCObjectRef()
 
 	control := C.ControlObjectClient_create(cObjectRef, c.conn)
 	if control == nil {
@@ -186,9 +187,10 @@ func (c *Client) ControlByControlModel(objectRef string, controlModel ControlMod
 	}
 
 	var cOrIdent *C.char
+	var freeCOrIdent func()
 	if param.OrIdent != "" {
-		cOrIdent = C.CString(param.OrIdent)
-		defer C.free(unsafe.Pointer(cOrIdent))
+		cOrIdent, freeCOrIdent = allocCString(param.OrIdent)
+		defer freeCOrIdent()
 	}
 
 	C.ControlObjectClient_setControlModel(control, C.ControlModel(controlModel))
@@ -219,8 +221,8 @@ func (c *Client) ControlForSboWithEnhancedSecurity(objectRef string, value bool)
 }
 
 func (c *Client) control(objectRef string, value, _select, direct, enhanced bool) error {
-	cObjectRef := C.CString(objectRef)
-	defer C.free(unsafe.Pointer(cObjectRef))
+	cObjectRef, freeCObjectRef := allocCString(objectRef)
+	defer freeCObjectRef()
 
 	control := C.ControlObjectClient_create(cObjectRef, c.conn)
 	if control == nil {

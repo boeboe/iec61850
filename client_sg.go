@@ -4,8 +4,8 @@ package iec61850
 import "C"
 import (
 	"fmt"
+
 	"github.com/spf13/cast"
-	"unsafe"
 )
 
 const (
@@ -48,8 +48,8 @@ func (c *Client) WriteSG(ld, ln, objectRef string, fc FC, actSG int, value inter
 // GetSG 获取SettingGroup
 func (c *Client) GetSG(objectRef string) (*SettingGroup, error) {
 	var clientError C.IedClientError
-	cObjectRef := C.CString(objectRef)
-	defer C.free(unsafe.Pointer(cObjectRef))
+	cObjectRef, freeCObjectRef := allocCString(objectRef)
+	defer freeCObjectRef()
 
 	// 获取类型
 	sgcbVarSpec := C.IedConnection_getVariableSpecification(c.conn, &clientError, cObjectRef, C.FunctionalConstraint(SP))

@@ -109,8 +109,8 @@ func (receiver *GooseReceiver) RemoveSubscriber(subscriber *GooseSubscriber) *Go
 }
 
 func (receiver *GooseReceiver) SetInterfaceID(interfaceID string) *GooseReceiver {
-	tmp := C.CString(interfaceID)
-	defer C.free(unsafe.Pointer(tmp))
+	tmp, freeTmp := allocCString(interfaceID)
+	defer freeTmp()
 	C.GooseReceiver_setInterfaceId(receiver.gooseReceiver, tmp)
 
 	return receiver

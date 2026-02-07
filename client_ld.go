@@ -4,7 +4,6 @@ package iec61850
 import "C"
 import (
 	"fmt"
-	"unsafe"
 )
 
 func (c *Client) GetLogicalDeviceList() DataModel {
@@ -27,8 +26,8 @@ func (c *Client) GetLogicalDeviceList() DataModel {
 				var ln LN
 				ln.Data = C2GoStr((*C.char)(logicalNode.data))
 				lnRef := fmt.Sprintf("%s/%s", ld.Data, C2GoStr((*C.char)(logicalNode.data)))
-				cRef := Go2CStr(lnRef)
-				defer C.free(unsafe.Pointer(cRef))
+				cRef, freeCRef := allocGo2CStr(lnRef)
+				defer freeCRef()
 				dataObjects := C.IedConnection_getLogicalNodeDirectory(c.conn, &clientError, cRef, C.ACSI_CLASS_DATA_OBJECT)
 				dataObject := dataObjects.next
 				for dataObject != nil {
@@ -45,8 +44,8 @@ func (c *Client) GetLogicalDeviceList() DataModel {
 					ln.DOs = append(ln.DOs, do)
 				}
 				C.LinkedList_destroy(dataObjects)
-				clnRef := Go2CStr(lnRef)
-				defer C.free(unsafe.Pointer(clnRef))
+				clnRef, freeClnRef := allocGo2CStr(lnRef)
+				defer freeClnRef()
 				dataSets := C.IedConnection_getLogicalNodeDirectory(c.conn, &clientError, clnRef, C.ACSI_CLASS_DATA_SET)
 				dataSet := dataSets.next
 				for dataSet != nil {
@@ -55,8 +54,8 @@ func (c *Client) GetLogicalDeviceList() DataModel {
 						ds.Data = C2GoStr((*C.char)(dataSet.data))
 						var isDeletable C.bool
 						dataSetRef := fmt.Sprintf("%s.%s", lnRef, ds.Data)
-						cdataSetRef := Go2CStr(dataSetRef)
-						defer C.free(unsafe.Pointer(cdataSetRef))
+						cdataSetRef, freeCdataSetRef := allocGo2CStr(dataSetRef)
+						defer freeCdataSetRef()
 
 						dataSetMembers := C.IedConnection_getDataSetDirectory(c.conn, &clientError, cdataSetRef, &isDeletable)
 						if isDeletable {
@@ -79,8 +78,8 @@ func (c *Client) GetLogicalDeviceList() DataModel {
 				}
 				C.LinkedList_destroy(dataSets)
 
-				clnRef1 := Go2CStr(lnRef)
-				defer C.free(unsafe.Pointer(clnRef1))
+				clnRef1, freeClnRef1 := allocGo2CStr(lnRef)
+				defer freeClnRef1()
 
 				reports := C.IedConnection_getLogicalNodeDirectory(c.conn, &clientError, clnRef1, C.ACSI_CLASS_URCB)
 				report := reports.next
@@ -93,8 +92,8 @@ func (c *Client) GetLogicalDeviceList() DataModel {
 				}
 				C.LinkedList_destroy(reports)
 
-				clnRef2 := Go2CStr(lnRef)
-				defer C.free(unsafe.Pointer(clnRef2))
+				clnRef2, freeClnRef2 := allocGo2CStr(lnRef)
+				defer freeClnRef2()
 
 				reports = C.IedConnection_getLogicalNodeDirectory(c.conn, &clientError, clnRef2, C.ACSI_CLASS_BRCB)
 				report = reports.next
@@ -127,8 +126,8 @@ func (c *Client) GetDAs(doRef string, das []DA) {
 
 	var clientError C.IedClientError
 
-	cdoRef := Go2CStr(doRef)
-	defer C.free(unsafe.Pointer(cdoRef))
+	cdoRef, freeCdoRef := allocGo2CStr(doRef)
+	defer freeCdoRef()
 
 	dataAttributes := C.IedConnection_getDataDirectory(c.conn, &clientError, cdoRef)
 	defer C.LinkedList_destroy(dataAttributes)

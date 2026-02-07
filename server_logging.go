@@ -60,8 +60,8 @@ func (r *LogStorageRef) AddEntryData(entryID uint64, dataRef string, data []byte
 	if r == nil || r.c == nil {
 		return false
 	}
-	cRef := C.CString(dataRef)
-	defer C.free(unsafe.Pointer(cRef))
+	cRef, freeCRef := allocCString(dataRef)
+	defer freeCRef()
 	var cData *C.uint8_t
 	cSize := C.int(0)
 	if len(data) > 0 {
@@ -77,8 +77,8 @@ func (is *IedServer) SetLogStorage(logRef string, storage *LogStorageRef) {
 	if is == nil || is.server == nil {
 		return
 	}
-	cRef := C.CString(logRef)
-	defer C.free(unsafe.Pointer(cRef))
+	cRef, freeCRef := allocCString(logRef)
+	defer freeCRef()
 	var cStorage C.LogStorage
 	if storage != nil && storage.c != nil {
 		cStorage = storage.c

@@ -30,8 +30,8 @@ func (r *MmsValueRef) Free() {
 
 // NewMmsValueVisibleString creates an MMS visible string value. Caller must call Free() when done.
 func NewMmsValueVisibleString(s string) *MmsValueRef {
-	cs := C.CString(s)
-	defer C.free(unsafe.Pointer(cs))
+	cs, freecs := allocCString(s)
+	defer freecs()
 	return &MmsValueRef{c: C.MmsValue_newVisibleString(cs)}
 }
 
@@ -42,8 +42,8 @@ func NewMmsValueVisibleStringWithSize(size int) *MmsValueRef {
 
 // NewMmsValueMmsString creates an MMS string value. Caller must call Free() when done.
 func NewMmsValueMmsString(s string) *MmsValueRef {
-	cs := C.CString(s)
-	defer C.free(unsafe.Pointer(cs))
+	cs, freecs := allocCString(s)
+	defer freecs()
 	return &MmsValueRef{c: C.MmsValue_newMmsString(cs)}
 }
 
@@ -183,8 +183,8 @@ func (r *MmsValueRef) SetVisibleString(s string) {
 	if r == nil || r.c == nil {
 		return
 	}
-	cs := C.CString(s)
-	defer C.free(unsafe.Pointer(cs))
+	cs, freecs := allocCString(s)
+	defer freecs()
 	C.MmsValue_setVisibleString(r.c, cs)
 }
 
@@ -193,8 +193,8 @@ func (r *MmsValueRef) SetMmsString(s string) {
 	if r == nil || r.c == nil {
 		return
 	}
-	cs := C.CString(s)
-	defer C.free(unsafe.Pointer(cs))
+	cs, freecs := allocCString(s)
+	defer freecs()
 	C.MmsValue_setMmsString(r.c, cs)
 }
 

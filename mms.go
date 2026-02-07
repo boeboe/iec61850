@@ -4,7 +4,6 @@ package iec61850
 import "C"
 import (
 	"fmt"
-	"unsafe"
 
 	"github.com/spf13/cast"
 )
@@ -260,8 +259,8 @@ func toStringMmsValue(value interface{}) (*C.MmsValue, error) {
 	if err != nil {
 		return nil, err
 	}
-	stringValue := C.CString(v)
-	defer C.free(unsafe.Pointer(stringValue))
+	stringValue, freeStringValue := allocCString(v)
+	defer freeStringValue()
 	mmsValue := C.MmsValue_newMmsString(stringValue)
 	return mmsValue, nil
 }

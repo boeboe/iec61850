@@ -85,8 +85,8 @@ func svCGOReportHandler(parameter unsafe.Pointer, asdu C.SVSubscriber_ASDU) {
 }
 
 func NewSvReceiver(conf SvReceiverConf) *SvReceiver {
-	ether := C.CString(conf.InterfaceID)
-	defer C.free(unsafe.Pointer(ether))
+	ether, freeEther := allocCString(conf.InterfaceID)
+	defer freeEther()
 	cSvReceiver := C.SVReceiver_create()
 	C.SVReceiver_setInterfaceId(cSvReceiver, ether)
 

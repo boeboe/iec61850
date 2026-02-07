@@ -198,8 +198,8 @@ func (is *IedServer) UpdateInt32AttributeValue(node *ModelNode, value int32) {
 
 // UpdateVisibleStringAttributeValue updates a DataAttribute with a visible string value.
 func (is *IedServer) UpdateVisibleStringAttributeValue(attr *DataAttribute, value string) {
-	cValue := C.CString(value)
-	defer C.free(unsafe.Pointer(cValue))
+	cValue, freeCValue := allocCString(value)
+	defer freeCValue()
 	C.IedServer_updateVisibleStringAttributeValue(is.server, attr.attribute, cValue)
 }
 
@@ -233,14 +233,14 @@ func (is *IedServer) GetNumberOfOpenConnections() int {
 
 // SetServerIdentity updates the server identity of the IedServer
 func (is *IedServer) SetServerIdentity(vendor string, model string, version string) {
-	cVendor := C.CString(vendor)
-	cModel := C.CString(model)
-	cVersion := C.CString(version)
+	cVendor, freeCVendor := allocCString(vendor)
+	cModel, freeCModel := allocCString(model)
+	cVersion, freeCVersion := allocCString(version)
 
 	defer func() {
-		C.free(unsafe.Pointer(cVendor))
-		C.free(unsafe.Pointer(cModel))
-		C.free(unsafe.Pointer(cVersion))
+		freeCVendor()
+		freeCModel()
+		freeCVersion()
 	}()
 
 	C.IedServer_setServerIdentity(is.server, cVendor, cModel, cVersion)
@@ -248,8 +248,8 @@ func (is *IedServer) SetServerIdentity(vendor string, model string, version stri
 
 // SetMmsLocalIpAddress sets the local IP address the MMS server will bind to. Call before Start.
 func (is *IedServer) SetMmsLocalIpAddress(localIpAddress string) error {
-	cAddr := C.CString(localIpAddress)
-	defer C.free(unsafe.Pointer(cAddr))
+	cAddr, freeCAddr := allocCString(localIpAddress)
+	defer freeCAddr()
 	C.IedServer_setLocalIpAddress(is.server, cAddr)
 	return nil
 }

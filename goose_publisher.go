@@ -51,8 +51,8 @@ func NewGoosePublisher(conf GoosePublisherConf) (publisher *GoosePublisher, err 
 	for i := 0; i < len(conf.DstAddr); i++ {
 		parameters.dstAddress[i] = C.uint8_t(conf.DstAddr[i])
 	}
-	ether := C.CString(conf.InterfaceID)
-	defer C.free(unsafe.Pointer(ether))
+	ether, freeEther := allocCString(conf.InterfaceID)
+	defer freeEther()
 
 	cGoosePublisher := C.GoosePublisher_create(&parameters, ether)
 	if !bool(C.is_publisher_not_null(cGoosePublisher)) {
@@ -68,15 +68,15 @@ func NewGoosePublisher(conf GoosePublisherConf) (publisher *GoosePublisher, err 
 }
 
 func (receiver *GoosePublisher) SetGoCbRef(goCbRef string) {
-	ref := C.CString(goCbRef)
-	defer C.free(unsafe.Pointer(ref))
+	ref, freeRef := allocCString(goCbRef)
+	defer freeRef()
 
 	C.GoosePublisher_setGoCbRef(receiver.internalPublisher, ref)
 }
 
 func (receiver *GoosePublisher) SetDataSetRef(dataSetRef string) {
-	ref := C.CString(dataSetRef)
-	defer C.free(unsafe.Pointer(ref))
+	ref, freeRef := allocCString(dataSetRef)
+	defer freeRef()
 
 	C.GoosePublisher_setDataSetRef(receiver.internalPublisher, ref)
 }

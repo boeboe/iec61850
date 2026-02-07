@@ -6,7 +6,6 @@ import "C"
 
 import (
 	"errors"
-	"unsafe"
 )
 
 // GOOSE Control Block element masks
@@ -54,8 +53,8 @@ type ClientGooseControlBlockValues struct {
 //   - error if the operation fails
 func (c *Client) GetGoCBValues(goCBReference string) (*ClientGooseControlBlockValues, error) {
 	var clientError C.IedClientError
-	cGoCBRef := C.CString(goCBReference)
-	defer C.free(unsafe.Pointer(cGoCBRef))
+	cGoCBRef, freeCGoCBRef := allocCString(goCBReference)
+	defer freeCGoCBRef()
 
 	goCB := C.IedConnection_getGoCBValues(c.conn, &clientError, cGoCBRef, nil)
 	if goCB == nil {
@@ -103,8 +102,8 @@ func (c *Client) GetGoCBValues(goCBReference string) (*ClientGooseControlBlockVa
 // Other attributes are usually read-only.
 func (c *Client) SetGoCBValues(goCBReference string, values *ClientGooseControlBlockValues, parametersMask uint32, singleRequest bool) error {
 	var clientError C.IedClientError
-	cGoCBRef := C.CString(goCBReference)
-	defer C.free(unsafe.Pointer(cGoCBRef))
+	cGoCBRef, freeCGoCBRef := allocCString(goCBReference)
+	defer freeCGoCBRef()
 
 	// Create a ClientGooseControlBlock instance
 	goCB := C.ClientGooseControlBlock_create(cGoCBRef)
@@ -118,13 +117,13 @@ func (c *Client) SetGoCBValues(goCBReference string, values *ClientGooseControlB
 		C.ClientGooseControlBlock_setGoEna(goCB, C.bool(values.GoEna))
 	}
 	if parametersMask&GoCBElementGoID != 0 {
-		cGoID := C.CString(values.GoID)
-		defer C.free(unsafe.Pointer(cGoID))
+		cGoID, freeCGoID := allocCString(values.GoID)
+		defer freeCGoID()
 		C.ClientGooseControlBlock_setGoID(goCB, cGoID)
 	}
 	if parametersMask&GoCBElementDatSet != 0 {
-		cDatSet := C.CString(values.DatSet)
-		defer C.free(unsafe.Pointer(cDatSet))
+		cDatSet, freeCDatSet := allocCString(values.DatSet)
+		defer freeCDatSet()
 		C.ClientGooseControlBlock_setDatSet(goCB, cDatSet)
 	}
 	if parametersMask&GoCBElementDstAddress != 0 {

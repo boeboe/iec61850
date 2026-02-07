@@ -2,7 +2,6 @@ package iec61850
 
 // #include <iec61850_server.h>
 import "C"
-import "unsafe"
 
 // ServerConfig Configuration object to configure IEC 61850 stack features
 // IEC 61850 Edition constants
@@ -77,8 +76,8 @@ func (that ServerConfig) SetReportSetting(setting uint8, isDyn bool) {
 func (that ServerConfig) createIedServerConfig(serverConfig ServerConfig) C.IedServerConfig {
 	config := C.IedServerConfig_create()
 
-	cFileServiceBasePath := C.CString(serverConfig.FileServiceBasePath)
-	defer C.free(unsafe.Pointer(cFileServiceBasePath))
+	cFileServiceBasePath, freeCFileServiceBasePath := allocCString(serverConfig.FileServiceBasePath)
+	defer freeCFileServiceBasePath()
 
 	C.IedServerConfig_setEdition(config, C.uint8_t(serverConfig.Edition))
 	C.IedServerConfig_setReportBufferSize(config, C.int(serverConfig.ReportBufferSize))

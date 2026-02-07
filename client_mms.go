@@ -81,10 +81,10 @@ func (c *Client) GetServerStatus(extendedDerivation bool) (*MmsServerStatus, err
 // sourceFile is the local (client) path, destinationFile is the remote (server) path.
 // This is the same as uploading a file to the server (MMS obtainFile service).
 func (c *Client) ObtainFile(sourceFile, destinationFile string) error {
-	cSrc := C.CString(sourceFile)
-	defer C.free(unsafe.Pointer(cSrc))
-	cDst := C.CString(destinationFile)
-	defer C.free(unsafe.Pointer(cDst))
+	cSrc, freecSrc := allocCString(sourceFile)
+	defer freecSrc()
+	cDst, freecDst := allocCString(destinationFile)
+	defer freecDst()
 	var cError C.MmsError
 	C.MmsConnection_obtainFile(c.getMmsConnection(), &cError, cSrc, cDst)
 	return GetMmsError(cError)
@@ -92,10 +92,10 @@ func (c *Client) ObtainFile(sourceFile, destinationFile string) error {
 
 // RenameFile renames a file on the server (currentName -> newName).
 func (c *Client) RenameFile(currentName, newName string) error {
-	cCur := C.CString(currentName)
-	defer C.free(unsafe.Pointer(cCur))
-	cNew := C.CString(newName)
-	defer C.free(unsafe.Pointer(cNew))
+	cCur, freecCur := allocCString(currentName)
+	defer freecCur()
+	cNew, freecNew := allocCString(newName)
+	defer freecNew()
 	var cError C.MmsError
 	C.MmsConnection_fileRename(c.getMmsConnection(), &cError, cCur, cNew)
 	return GetMmsError(cError)
@@ -104,10 +104,10 @@ func (c *Client) RenameFile(currentName, newName string) error {
 // GetVariableAccessAttributes returns the MMS variable access attributes (type specification) for a named variable.
 // The caller must call Free() on the returned ref when done.
 func (c *Client) GetVariableAccessAttributes(domainID, itemID string) (*MmsVariableSpecificationRef, error) {
-	cDomain := C.CString(domainID)
-	defer C.free(unsafe.Pointer(cDomain))
-	cItem := C.CString(itemID)
-	defer C.free(unsafe.Pointer(cItem))
+	cDomain, freecDomain := allocCString(domainID)
+	defer freecDomain()
+	cItem, freecItem := allocCString(itemID)
+	defer freecItem()
 	var cError C.MmsError
 	spec := C.MmsConnection_getVariableAccessAttributes(c.getMmsConnection(), &cError, cDomain, cItem)
 	if err := GetMmsError(cError); err != nil {
@@ -135,8 +135,8 @@ func (c *Client) GetDomainNames() ([]string, error) {
 
 // GetDomainVariableNames returns the names of variables in an MMS domain.
 func (c *Client) GetDomainVariableNames(domainID string) ([]string, error) {
-	cDomain := C.CString(domainID)
-	defer C.free(unsafe.Pointer(cDomain))
+	cDomain, freecDomain := allocCString(domainID)
+	defer freecDomain()
 	var cError C.MmsError
 	list := C.MmsConnection_getDomainVariableNames(c.getMmsConnection(), &cError, cDomain)
 	if err := GetMmsError(cError); err != nil {
@@ -152,9 +152,10 @@ func (c *Client) GetDomainVariableNames(domainID string) ([]string, error) {
 // GetDomainVariableListNames returns the names of named variable lists in a domain, or VMD scope if domainID is "".
 func (c *Client) GetDomainVariableListNames(domainID string) ([]string, error) {
 	var cDomain *C.char
+	var freeCDomain func()
 	if domainID != "" {
-		cDomain = C.CString(domainID)
-		defer C.free(unsafe.Pointer(cDomain))
+		cDomain, freeCDomain = allocCString(domainID)
+		defer freeCDomain()
 	}
 	var cError C.MmsError
 	list := C.MmsConnection_getDomainVariableListNames(c.getMmsConnection(), &cError, cDomain)
@@ -217,8 +218,8 @@ func (c *Client) WriteMultipleVariables(domainID string, itemIDs []string, value
 	if len(itemIDs) == 0 {
 		return nil, nil
 	}
-	cDomain := C.CString(domainID)
-	defer C.free(unsafe.Pointer(cDomain))
+	cDomain, freecDomain := allocCString(domainID)
+	defer freecDomain()
 	itemsList := C.LinkedList_create()
 	defer C.LinkedList_destroyDeep(itemsList, (C.LinkedListValueDeleteFunction)(C.free))
 	valuesList := C.LinkedList_create()
@@ -258,12 +259,13 @@ func (c *Client) WriteMultipleVariables(domainID string, itemIDs []string, value
 // The returned slice contains one MmsValue per list entry; the caller does not own the underlying C memory (it is freed by the library after the call returns), so values are converted to Go types.
 func (c *Client) ReadNamedVariableListValues(domainID, listName string, specWithResult bool) ([]*MmsValue, error) {
 	var cDomain *C.char
+	var freeCDomain func()
 	if domainID != "" {
-		cDomain = C.CString(domainID)
-		defer C.free(unsafe.Pointer(cDomain))
+		cDomain, freeCDomain = allocCString(domainID)
+		defer freeCDomain()
 	}
-	cList := C.CString(listName)
-	defer C.free(unsafe.Pointer(cList))
+	cList, freecList := allocCString(listName)
+	defer freecList()
 	var cError C.MmsError
 	result := C.MmsConnection_readNamedVariableListValues(c.getMmsConnection(), &cError, cDomain, cList, C.bool(specWithResult))
 	if err := GetMmsError(cError); err != nil {
@@ -278,8 +280,8 @@ func (c *Client) ReadNamedVariableListValues(domainID, listName string, specWith
 
 // ReadNamedVariableListValuesAssociationSpecific reads values from an association-specific named variable list.
 func (c *Client) ReadNamedVariableListValuesAssociationSpecific(listName string, specWithResult bool) ([]*MmsValue, error) {
-	cList := C.CString(listName)
-	defer C.free(unsafe.Pointer(cList))
+	cList, freecList := allocCString(listName)
+	defer freecList()
 	var cError C.MmsError
 	result := C.MmsConnection_readNamedVariableListValuesAssociationSpecific(c.getMmsConnection(), &cError, cList, C.bool(specWithResult))
 	if err := GetMmsError(cError); err != nil {
@@ -295,12 +297,13 @@ func (c *Client) ReadNamedVariableListValuesAssociationSpecific(listName string,
 // ReadNamedVariableListDirectory returns the directory (list of variable references) and whether the list is deletable.
 func (c *Client) ReadNamedVariableListDirectory(domainID, listName string) (entries []VariableListEntry, deletable bool, err error) {
 	var cDomain *C.char
+	var freeCDomain func()
 	if domainID != "" {
-		cDomain = C.CString(domainID)
-		defer C.free(unsafe.Pointer(cDomain))
+		cDomain, freeCDomain = allocCString(domainID)
+		defer freeCDomain()
 	}
-	cList := C.CString(listName)
-	defer C.free(unsafe.Pointer(cList))
+	cList, freecList := allocCString(listName)
+	defer freecList()
 	var cError C.MmsError
 	var cDeletable C.bool
 	list := C.MmsConnection_readNamedVariableListDirectory(c.getMmsConnection(), &cError, cDomain, cList, &cDeletable)
@@ -330,8 +333,8 @@ func (c *Client) ReadNamedVariableListDirectory(domainID, listName string) (entr
 
 // ReadNamedVariableListDirectoryAssociationSpecific returns the directory for an association-specific list.
 func (c *Client) ReadNamedVariableListDirectoryAssociationSpecific(listName string) (entries []VariableListEntry, deletable bool, err error) {
-	cList := C.CString(listName)
-	defer C.free(unsafe.Pointer(cList))
+	cList, freecList := allocCString(listName)
+	defer freecList()
 	var cError C.MmsError
 	var cDeletable C.bool
 	list := C.MmsConnection_readNamedVariableListDirectoryAssociationSpecific(c.getMmsConnection(), &cError, cList, &cDeletable)
@@ -365,12 +368,13 @@ func (c *Client) DefineNamedVariableList(domainID, listName string, variableSpec
 		return UserProvidedInvalidArgument
 	}
 	var cDomain *C.char
+	var freeCDomain func()
 	if domainID != "" {
-		cDomain = C.CString(domainID)
-		defer C.free(unsafe.Pointer(cDomain))
+		cDomain, freeCDomain = allocCString(domainID)
+		defer freeCDomain()
 	}
-	cList := C.CString(listName)
-	defer C.free(unsafe.Pointer(cList))
+	cList, freecList := allocCString(listName)
+	defer freecList()
 	clist := C.LinkedList_create()
 	defer C.LinkedList_destroyDeep(clist, (C.LinkedListValueDeleteFunction)(C.MmsVariableAccessSpecification_destroy))
 	for _, vs := range variableSpecs {
@@ -398,8 +402,8 @@ func (c *Client) DefineNamedVariableListAssociationSpecific(listName string, var
 	if len(variableSpecs) == 0 {
 		return UserProvidedInvalidArgument
 	}
-	cList := C.CString(listName)
-	defer C.free(unsafe.Pointer(cList))
+	cList, freecList := allocCString(listName)
+	defer freecList()
 	clist := C.LinkedList_create()
 	defer C.LinkedList_destroyDeep(clist, (C.LinkedListValueDeleteFunction)(C.MmsVariableAccessSpecification_destroy))
 	for _, vs := range variableSpecs {
@@ -425,12 +429,13 @@ func (c *Client) DefineNamedVariableListAssociationSpecific(listName string, var
 // DeleteNamedVariableList deletes a domain or VMD scoped named variable list. Pass domainID as "" for VMD scope.
 func (c *Client) DeleteNamedVariableList(domainID, listName string) (bool, error) {
 	var cDomain *C.char
+	var freeCDomain func()
 	if domainID != "" {
-		cDomain = C.CString(domainID)
-		defer C.free(unsafe.Pointer(cDomain))
+		cDomain, freeCDomain = allocCString(domainID)
+		defer freeCDomain()
 	}
-	cList := C.CString(listName)
-	defer C.free(unsafe.Pointer(cList))
+	cList, freecList := allocCString(listName)
+	defer freecList()
 	var cError C.MmsError
 	ok := C.MmsConnection_deleteNamedVariableList(c.getMmsConnection(), &cError, cDomain, cList)
 	if err := GetMmsError(cError); err != nil {
@@ -441,8 +446,8 @@ func (c *Client) DeleteNamedVariableList(domainID, listName string) (bool, error
 
 // DeleteAssociationSpecificNamedVariableList deletes an association-specific named variable list.
 func (c *Client) DeleteAssociationSpecificNamedVariableList(listName string) (bool, error) {
-	cList := C.CString(listName)
-	defer C.free(unsafe.Pointer(cList))
+	cList, freecList := allocCString(listName)
+	defer freecList()
 	var cError C.MmsError
 	ok := C.MmsConnection_deleteAssociationSpecificNamedVariableList(c.getMmsConnection(), &cError, cList)
 	if err := GetMmsError(cError); err != nil {
@@ -464,12 +469,13 @@ func (c *Client) WriteNamedVariableList(domainID, listName string, values []*Mms
 		return nil, UserProvidedInvalidArgument
 	}
 	var cDomain *C.char
+	var freeCDomain func()
 	if domainID != "" {
-		cDomain = C.CString(domainID)
-		defer C.free(unsafe.Pointer(cDomain))
+		cDomain, freeCDomain = allocCString(domainID)
+		defer freeCDomain()
 	}
-	cList := C.CString(listName)
-	defer C.free(unsafe.Pointer(cList))
+	cList, freecList := allocCString(listName)
+	defer freecList()
 	clist := C.LinkedList_create()
 	for _, v := range values {
 		if v != nil && v.c != nil {
@@ -578,10 +584,10 @@ func convertJournalEntry(entry C.MmsJournalEntry) JournalEntry {
 
 // ReadJournalTimeRange reads journal entries in the given time range. startTimeMs and endTimeMs are milliseconds since Unix epoch (binary time). The caller does not own the returned entries.
 func (c *Client) ReadJournalTimeRange(domainID, itemID string, startTimeMs, endTimeMs uint64) (entries []JournalEntry, moreFollows bool, err error) {
-	cDomain := C.CString(domainID)
-	defer C.free(unsafe.Pointer(cDomain))
-	cItem := C.CString(itemID)
-	defer C.free(unsafe.Pointer(cItem))
+	cDomain, freecDomain := allocCString(domainID)
+	defer freecDomain()
+	cItem, freecItem := allocCString(itemID)
+	defer freecItem()
 	startV := C.MmsValue_newBinaryTime(C.bool(false))
 	defer C.MmsValue_delete(startV)
 	C.MmsValue_setBinaryTime(startV, C.uint64_t(startTimeMs))
@@ -611,10 +617,10 @@ func (c *Client) ReadJournalTimeRange(domainID, itemID string, startTimeMs, endT
 // ReadJournalStartAfter reads journal entries starting after the given time and entry specification.
 // timeSpecification and entrySpecification are MMS binary time and octet string respectively; pass nil for entrySpecification to start from the time.
 func (c *Client) ReadJournalStartAfter(domainID, itemID string, timeSpecificationMs uint64, entrySpecification []byte) (entries []JournalEntry, moreFollows bool, err error) {
-	cDomain := C.CString(domainID)
-	defer C.free(unsafe.Pointer(cDomain))
-	cItem := C.CString(itemID)
-	defer C.free(unsafe.Pointer(cItem))
+	cDomain, freecDomain := allocCString(domainID)
+	defer freecDomain()
+	cItem, freecItem := allocCString(itemID)
+	defer freecItem()
 	timeV := C.MmsValue_newBinaryTime(C.bool(false))
 	defer C.MmsValue_delete(timeV)
 	C.MmsValue_setBinaryTime(timeV, C.uint64_t(timeSpecificationMs))

@@ -1,5 +1,8 @@
 package iec61850
 
+// #include <iec61850_client.h>
+import "C"
+
 type MmsType int
 
 type MmsValue struct {
@@ -106,31 +109,31 @@ const (
 type MmsVariableAccessAttribute int32
 
 const (
-	MmsVariableReadOnly   MmsVariableAccessAttribute = 0
-	MmsVariableWriteOnly  MmsVariableAccessAttribute = 1
-	MmsVariableReadWrite  MmsVariableAccessAttribute = 2
+	MmsVariableReadOnly  MmsVariableAccessAttribute = 0
+	MmsVariableWriteOnly MmsVariableAccessAttribute = 1
+	MmsVariableReadWrite MmsVariableAccessAttribute = 2
 	// Aliases with MMS_ prefix for compatibility.
 	MMS_VARIABLE_READ_ONLY  = MmsVariableReadOnly
 	MMS_VARIABLE_WRITE_ONLY = MmsVariableWriteOnly
 	MMS_VARIABLE_READ_WRITE = MmsVariableReadWrite
-	MMS_ACCESS_READ_WRITE  = MmsVariableReadWrite
-	MMS_ACCESS_READ_ONLY   = MmsVariableReadOnly
-	MMS_ACCESS_WRITE_ONLY  = MmsVariableWriteOnly
+	MMS_ACCESS_READ_WRITE   = MmsVariableReadWrite
+	MMS_ACCESS_READ_ONLY    = MmsVariableReadOnly
+	MMS_ACCESS_WRITE_ONLY   = MmsVariableWriteOnly
 )
 
 // MmsFileAccessAttribute describes file access permissions (bitmask).
 type MmsFileAccessAttribute int32
 
 const (
-	MmsFileAccessNone   MmsFileAccessAttribute = 0
-	MmsFileRead         MmsFileAccessAttribute = 1
-	MmsFileWrite        MmsFileAccessAttribute = 2
-	MmsFileDelete       MmsFileAccessAttribute = 4
+	MmsFileAccessNone MmsFileAccessAttribute = 0
+	MmsFileRead       MmsFileAccessAttribute = 1
+	MmsFileWrite      MmsFileAccessAttribute = 2
+	MmsFileDelete     MmsFileAccessAttribute = 4
 	// Aliases with MMS_ prefix for compatibility.
-	MMS_FILE_ACCESS_NONE   = MmsFileAccessNone
-	MMS_FILE_READ         = MmsFileRead
-	MMS_FILE_WRITE        = MmsFileWrite
-	MMS_FILE_DELETE       = MmsFileDelete
+	MMS_FILE_ACCESS_NONE = MmsFileAccessNone
+	MMS_FILE_READ        = MmsFileRead
+	MMS_FILE_WRITE       = MmsFileWrite
+	MMS_FILE_DELETE      = MmsFileDelete
 )
 
 // MmsJournalVariable identifies a journal variable type (tag or entry ID).
@@ -140,7 +143,7 @@ const (
 	MmsJournalVariableTag     MmsJournalVariable = 0
 	MmsJournalVariableEntryID MmsJournalVariable = 1
 	// Aliases with MMS_ prefix for compatibility.
-	MMS_JOURNAL_VARIABLE_TAG     = MmsJournalVariableTag
+	MMS_JOURNAL_VARIABLE_TAG      = MmsJournalVariableTag
 	MMS_JOURNAL_VARIABLE_ENTRY_ID = MmsJournalVariableEntryID
 )
 
@@ -148,10 +151,10 @@ const (
 type MmsDeletableType int32
 
 const (
-	MmsDeletableNone            MmsDeletableType = 0
-	MmsDeletableAASpecific      MmsDeletableType = 1
-	MmsDeletableDomainSpecific  MmsDeletableType = 2
-	MmsDeletableVMDSpecific     MmsDeletableType = 3
+	MmsDeletableNone           MmsDeletableType = 0
+	MmsDeletableAASpecific     MmsDeletableType = 1
+	MmsDeletableDomainSpecific MmsDeletableType = 2
+	MmsDeletableVMDSpecific    MmsDeletableType = 3
 	// Aliases with MMS_ prefix for compatibility.
 	MMS_DELETABLE_NONE            = MmsDeletableNone
 	MMS_DELETABLE_AA_SPECIFIC     = MmsDeletableAASpecific
@@ -173,24 +176,24 @@ const (
 type MmsNamedVariableListType int32
 
 const (
-	NamedVariableListTypeVMDSpecific         MmsNamedVariableListType = 0
-	NamedVariableListTypeDomainSpecific      MmsNamedVariableListType = 1
-	NamedVariableListTypeAssociationSpecific MmsNamedVariableListType = 2
-	NAMED_VARIABLE_LIST_TYPE_VMD_SPECIFIC         = NamedVariableListTypeVMDSpecific
-	NAMED_VARIABLE_LIST_TYPE_DOMAIN_SPECIFIC      = NamedVariableListTypeDomainSpecific
-	NAMED_VARIABLE_LIST_TYPE_ASSOCIATION_SPECIFIC = NamedVariableListTypeAssociationSpecific
+	NamedVariableListTypeVMDSpecific              MmsNamedVariableListType = 0
+	NamedVariableListTypeDomainSpecific           MmsNamedVariableListType = 1
+	NamedVariableListTypeAssociationSpecific      MmsNamedVariableListType = 2
+	NAMED_VARIABLE_LIST_TYPE_VMD_SPECIFIC                                  = NamedVariableListTypeVMDSpecific
+	NAMED_VARIABLE_LIST_TYPE_DOMAIN_SPECIFIC                               = NamedVariableListTypeDomainSpecific
+	NAMED_VARIABLE_LIST_TYPE_ASSOCIATION_SPECIFIC                          = NamedVariableListTypeAssociationSpecific
 )
 
 // MmsServerState represents the MMS server state.
 type MmsServerState int32
 
 const (
-	MmsServerStateIdle    MmsServerState = 0
-	MmsServerStateLoading MmsServerState = 1
-	MmsServerStateRunning MmsServerState = 2
-	MMS_SERVER_STATE_IDLE    = MmsServerStateIdle
-	MMS_SERVER_STATE_LOADING = MmsServerStateLoading
-	MMS_SERVER_STATE_RUNNING = MmsServerStateRunning
+	MmsServerStateIdle       MmsServerState = 0
+	MmsServerStateLoading    MmsServerState = 1
+	MmsServerStateRunning    MmsServerState = 2
+	MMS_SERVER_STATE_IDLE                   = MmsServerStateIdle
+	MMS_SERVER_STATE_LOADING                = MmsServerStateLoading
+	MMS_SERVER_STATE_RUNNING                = MmsServerStateRunning
 )
 
 // MmsVariableAccessSpec describes a variable reference in a named variable list (domain + item).
@@ -214,45 +217,45 @@ const (
 	MmsServerConnectionStateIdle        MmsServerConnectionState = 0
 	MmsServerConnectionStateAssociation MmsServerConnectionState = 1
 	MmsServerConnectionStateConcluded   MmsServerConnectionState = 2
-	MMS_CON_STATE_IDLE                  = MmsServerConnectionStateIdle
-	MMS_CON_STATE_ASSOCIATION           = MmsServerConnectionStateAssociation
-	MMS_CON_STATE_CONCLUDED             = MmsServerConnectionStateConcluded
+	MMS_CON_STATE_IDLE                                           = MmsServerConnectionStateIdle
+	MMS_CON_STATE_ASSOCIATION                                    = MmsServerConnectionStateAssociation
+	MMS_CON_STATE_CONCLUDED                                      = MmsServerConnectionStateConcluded
 )
 
 // MmsServiceSupportedBitmap is a bitmap of supported MMS services.
 type MmsServiceSupportedBitmap uint32
 
 const (
-	MmsServiceStatus                      MmsServiceSupportedBitmap = 0x0001
-	MmsServiceGetNameList                 MmsServiceSupportedBitmap = 0x0002
-	MmsServiceIdentify                    MmsServiceSupportedBitmap = 0x0004
-	MmsServiceRead                        MmsServiceSupportedBitmap = 0x0008
-	MmsServiceWrite                       MmsServiceSupportedBitmap = 0x0010
-	MmsServiceGetVariableAccess           MmsServiceSupportedBitmap = 0x0020
-	MmsServiceDefineNamedVariableList     MmsServiceSupportedBitmap = 0x0040
-	MmsServiceGetNamedVariableListAttrs    MmsServiceSupportedBitmap = 0x0080
-	MmsServiceDeleteNamedVariableList     MmsServiceSupportedBitmap = 0x0100
-	MmsServiceFileOpen                    MmsServiceSupportedBitmap = 0x0200
-	MmsServiceFileRead                    MmsServiceSupportedBitmap = 0x0400
-	MmsServiceFileClose                   MmsServiceSupportedBitmap = 0x0800
-	MmsServiceFileDelete                  MmsServiceSupportedBitmap = 0x1000
-	MmsServiceFileDirectory               MmsServiceSupportedBitmap = 0x2000
-	MmsServiceJournalRead                 MmsServiceSupportedBitmap = 0x4000
-	MMS_SERVICE_STATUS                   = MmsServiceStatus
-	MMS_SERVICE_GET_NAME_LIST            = MmsServiceGetNameList
-	MMS_SERVICE_IDENTIFY                 = MmsServiceIdentify
-	MMS_SERVICE_READ                     = MmsServiceRead
-	MMS_SERVICE_WRITE                    = MmsServiceWrite
-	MMS_SERVICE_GET_VARIABLE_ACCESS      = MmsServiceGetVariableAccess
-	MMS_SERVICE_DEFINE_NAMED_VARIABLE_LIST = MmsServiceDefineNamedVariableList
-	MMS_SERVICE_GET_NAMED_VARIABLE_LIST_ATTRIBUTES = MmsServiceGetNamedVariableListAttrs
-	MMS_SERVICE_DELETE_NAMED_VARIABLE_LIST = MmsServiceDeleteNamedVariableList
-	MMS_SERVICE_FILE_OPEN                = MmsServiceFileOpen
-	MMS_SERVICE_FILE_READ                = MmsServiceFileRead
-	MMS_SERVICE_FILE_CLOSE               = MmsServiceFileClose
-	MMS_SERVICE_FILE_DELETE              = MmsServiceFileDelete
-	MMS_SERVICE_FILE_DIRECTORY           = MmsServiceFileDirectory
-	MMS_SERVICE_JOURNAL_READ             = MmsServiceJournalRead
+	MmsServiceStatus                               MmsServiceSupportedBitmap = 0x0001
+	MmsServiceGetNameList                          MmsServiceSupportedBitmap = 0x0002
+	MmsServiceIdentify                             MmsServiceSupportedBitmap = 0x0004
+	MmsServiceRead                                 MmsServiceSupportedBitmap = 0x0008
+	MmsServiceWrite                                MmsServiceSupportedBitmap = 0x0010
+	MmsServiceGetVariableAccess                    MmsServiceSupportedBitmap = 0x0020
+	MmsServiceDefineNamedVariableList              MmsServiceSupportedBitmap = 0x0040
+	MmsServiceGetNamedVariableListAttrs            MmsServiceSupportedBitmap = 0x0080
+	MmsServiceDeleteNamedVariableList              MmsServiceSupportedBitmap = 0x0100
+	MmsServiceFileOpen                             MmsServiceSupportedBitmap = 0x0200
+	MmsServiceFileRead                             MmsServiceSupportedBitmap = 0x0400
+	MmsServiceFileClose                            MmsServiceSupportedBitmap = 0x0800
+	MmsServiceFileDelete                           MmsServiceSupportedBitmap = 0x1000
+	MmsServiceFileDirectory                        MmsServiceSupportedBitmap = 0x2000
+	MmsServiceJournalRead                          MmsServiceSupportedBitmap = 0x4000
+	MMS_SERVICE_STATUS                                                       = MmsServiceStatus
+	MMS_SERVICE_GET_NAME_LIST                                                = MmsServiceGetNameList
+	MMS_SERVICE_IDENTIFY                                                     = MmsServiceIdentify
+	MMS_SERVICE_READ                                                         = MmsServiceRead
+	MMS_SERVICE_WRITE                                                        = MmsServiceWrite
+	MMS_SERVICE_GET_VARIABLE_ACCESS                                          = MmsServiceGetVariableAccess
+	MMS_SERVICE_DEFINE_NAMED_VARIABLE_LIST                                   = MmsServiceDefineNamedVariableList
+	MMS_SERVICE_GET_NAMED_VARIABLE_LIST_ATTRIBUTES                           = MmsServiceGetNamedVariableListAttrs
+	MMS_SERVICE_DELETE_NAMED_VARIABLE_LIST                                   = MmsServiceDeleteNamedVariableList
+	MMS_SERVICE_FILE_OPEN                                                    = MmsServiceFileOpen
+	MMS_SERVICE_FILE_READ                                                    = MmsServiceFileRead
+	MMS_SERVICE_FILE_CLOSE                                                   = MmsServiceFileClose
+	MMS_SERVICE_FILE_DELETE                                                  = MmsServiceFileDelete
+	MMS_SERVICE_FILE_DIRECTORY                                               = MmsServiceFileDirectory
+	MMS_SERVICE_JOURNAL_READ                                                 = MmsServiceJournalRead
 )
 
 // IsoConnectionParameters holds ISO layer connection parameters (AP title, selectors).
@@ -261,7 +264,7 @@ type IsoConnectionParameters struct {
 	LocalAeQualifier  int32
 	RemoteApTitle     []byte
 	RemoteAeQualifier int32
-	LocalTSelector   []byte
+	LocalTSelector    []byte
 	LocalSSelector    []byte
 	LocalPSelector    []byte
 	RemoteTSelector   []byte
@@ -285,11 +288,11 @@ type MmsJournalVariableSpec struct {
 // MmsConnectionParameters holds MMS layer connection parameters (max outstanding calls, PDU size, etc.).
 // Returned by Client.GetConnectionParameters after connection is established.
 type MmsConnectionParameters struct {
-	MaxServOutstandingCalling   int32
-	MaxServOutstandingCalled    int32
-	DataStructureNestingLevel   int32
-	MaxPduSize                  int32
-	ServicesSupported          [11]uint8
+	MaxServOutstandingCalling int32
+	MaxServOutstandingCalled  int32
+	DataStructureNestingLevel int32
+	MaxPduSize                int32
+	ServicesSupported         [11]uint8
 }
 
 // MmsServerStatus holds the result of GetServerStatus (VMD logical/physical status).

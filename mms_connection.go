@@ -255,8 +255,8 @@ func (c *MmsConnection) SetFilestoreBasepath(basepath string) {
 	if c.c == nil {
 		return
 	}
-	cPath := C.CString(basepath)
-	defer C.free(unsafe.Pointer(cPath))
+	cPath, freecPath := allocCString(basepath)
+	defer freecPath()
 	C.MmsConnection_setFilestoreBasepath(c.c, cPath)
 }
 
@@ -378,8 +378,8 @@ func (c *MmsConnection) ConnectAsync(hostname string, port int, callback func(er
 	C.MmsConnection_setConnectionStateChangedHandler(conn, (C.MmsConnectionStateChangedHandler)(C.mmsConnectionStateChangedBridge), unsafe.Pointer(ctx))
 	c.connMu.Unlock()
 
-	host := C.CString(hostname)
-	defer C.free(unsafe.Pointer(host))
+	host, freehost := allocCString(hostname)
+	defer freehost()
 	var cError C.MmsError
 	C.MmsConnection_connectAsync(conn, &cError, host, C.int(port))
 	if err := GetMmsError(cError); err != nil {
@@ -922,10 +922,10 @@ func (c *MmsConnection) ReadVariableAsync(domainID, itemID string, callback func
 	}
 	conn := c.c
 	c.connMu.Unlock()
-	cDomain := C.CString(domainID)
-	defer C.free(unsafe.Pointer(cDomain))
-	cItem := C.CString(itemID)
-	defer C.free(unsafe.Pointer(cItem))
+	cDomain, freecDomain := allocCString(domainID)
+	defer freecDomain()
+	cItem, freecItem := allocCString(itemID)
+	defer freecItem()
 	ctx := &readVarAsyncCtx{callback: callback}
 	var cError C.MmsError
 	C.MmsConnection_readVariableAsync(conn, nil, &cError, cDomain, cItem, (C.MmsConnection_ReadVariableHandler)(C.readVariableAsyncBridge), unsafe.Pointer(ctx))
@@ -951,10 +951,10 @@ func (c *MmsConnection) WriteVariableAsync(domainID, itemID string, value *MmsVa
 		}
 		return UserProvidedInvalidArgument
 	}
-	cDomain := C.CString(domainID)
-	defer C.free(unsafe.Pointer(cDomain))
-	cItem := C.CString(itemID)
-	defer C.free(unsafe.Pointer(cItem))
+	cDomain, freecDomain := allocCString(domainID)
+	defer freecDomain()
+	cItem, freecItem := allocCString(itemID)
+	defer freecItem()
 	ctx := &writeVarAsyncCtx{callback: callback}
 	var cError C.MmsError
 	C.MmsConnection_writeVariableAsync(conn, nil, &cError, cDomain, cItem, value.c, (C.MmsConnection_WriteVariableHandler)(C.writeVariableAsyncBridge), unsafe.Pointer(ctx))
@@ -981,12 +981,13 @@ func (c *MmsConnection) DefineNamedVariableListAsync(domainID, listName string, 
 	conn := c.c
 	c.connMu.Unlock()
 	var cDomain *C.char
+	var freeCDomain func()
 	if domainID != "" {
-		cDomain = C.CString(domainID)
-		defer C.free(unsafe.Pointer(cDomain))
+		cDomain, freeCDomain = allocCString(domainID)
+		defer freeCDomain()
 	}
-	cList := C.CString(listName)
-	defer C.free(unsafe.Pointer(cList))
+	cList, freecList := allocCString(listName)
+	defer freecList()
 	clist := C.LinkedList_create()
 	for _, vs := range variableSpecs {
 		cDom := C.CString(vs.DomainID)
@@ -1024,12 +1025,13 @@ func (c *MmsConnection) ReadNamedVariableListDirectoryAsync(domainID, listName s
 	conn := c.c
 	c.connMu.Unlock()
 	var cDomain *C.char
+	var freeCDomain func()
 	if domainID != "" {
-		cDomain = C.CString(domainID)
-		defer C.free(unsafe.Pointer(cDomain))
+		cDomain, freeCDomain = allocCString(domainID)
+		defer freeCDomain()
 	}
-	cList := C.CString(listName)
-	defer C.free(unsafe.Pointer(cList))
+	cList, freecList := allocCString(listName)
+	defer freecList()
 	ctx := &readNVLDirectoryAsyncCtx{callback: callback}
 	var cError C.MmsError
 	C.MmsConnection_readNamedVariableListDirectoryAsync(conn, nil, &cError, cDomain, cList, (C.MmsConnection_ReadNVLDirectoryHandler)(C.readNVLDirectoryAsyncBridge), unsafe.Pointer(ctx))
@@ -1050,10 +1052,10 @@ func (c *MmsConnection) GetVariableAccessAttributesAsync(domainID, itemID string
 	}
 	conn := c.c
 	c.connMu.Unlock()
-	cDomain := C.CString(domainID)
-	defer C.free(unsafe.Pointer(cDomain))
-	cItem := C.CString(itemID)
-	defer C.free(unsafe.Pointer(cItem))
+	cDomain, freecDomain := allocCString(domainID)
+	defer freecDomain()
+	cItem, freecItem := allocCString(itemID)
+	defer freecItem()
 	ctx := &getVariableAccessAttributesAsyncCtx{callback: callback}
 	var cError C.MmsError
 	C.MmsConnection_getVariableAccessAttributesAsync(conn, nil, &cError, cDomain, cItem, (C.MmsConnection_GetVariableAccessAttributesHandler)(C.getVariableAccessAttributesAsyncBridge), unsafe.Pointer(ctx))
@@ -1093,8 +1095,8 @@ func (c *MmsConnection) WriteMultipleVariables(domainID string, items []string, 
 	if len(items) == 0 {
 		return nil
 	}
-	cDomain := C.CString(domainID)
-	defer C.free(unsafe.Pointer(cDomain))
+	cDomain, freecDomain := allocCString(domainID)
+	defer freecDomain()
 	itemsList := C.LinkedList_create()
 	defer C.LinkedList_destroyDeep(itemsList, (C.LinkedListValueDeleteFunction)(C.free))
 	valuesList := C.LinkedList_create()
@@ -1138,12 +1140,13 @@ func (c *MmsConnection) ReadNamedVariableListValues(domainID, listName string, s
 		return nil, NotConnected
 	}
 	var cDomain *C.char
+	var freeCDomain func()
 	if domainID != "" {
-		cDomain = C.CString(domainID)
-		defer C.free(unsafe.Pointer(cDomain))
+		cDomain, freeCDomain = allocCString(domainID)
+		defer freeCDomain()
 	}
-	cList := C.CString(listName)
-	defer C.free(unsafe.Pointer(cList))
+	cList, freecList := allocCString(listName)
+	defer freecList()
 	var cError C.MmsError
 	result := C.MmsConnection_readNamedVariableListValues(c.c, &cError, cDomain, cList, C.bool(specification))
 	if err := GetMmsError(cError); err != nil {
@@ -1164,10 +1167,10 @@ func (c *MmsConnection) ReadArrayElements(domainID, itemID string, startIndex, n
 	if c.c == nil {
 		return nil, NotConnected
 	}
-	cDomain := C.CString(domainID)
-	defer C.free(unsafe.Pointer(cDomain))
-	cItem := C.CString(itemID)
-	defer C.free(unsafe.Pointer(cItem))
+	cDomain, freecDomain := allocCString(domainID)
+	defer freecDomain()
+	cItem, freecItem := allocCString(itemID)
+	defer freecItem()
 	var cError C.MmsError
 	result := C.MmsConnection_readArrayElements(c.c, &cError, cDomain, cItem, C.uint32_t(startIndex), C.uint32_t(numberOfElements))
 	if err := GetMmsError(cError); err != nil {
@@ -1195,12 +1198,13 @@ func (c *MmsConnection) ReadNamedVariableListValuesAsync(domainID, listName stri
 	conn := c.c
 	c.connMu.Unlock()
 	var cDomain *C.char
+	var freeCDomain func()
 	if domainID != "" {
-		cDomain = C.CString(domainID)
-		defer C.free(unsafe.Pointer(cDomain))
+		cDomain, freeCDomain = allocCString(domainID)
+		defer freeCDomain()
 	}
-	cList := C.CString(listName)
-	defer C.free(unsafe.Pointer(cList))
+	cList, freecList := allocCString(listName)
+	defer freecList()
 	ctx := &readVarAsyncCtx{callback: callback}
 	var cError C.MmsError
 	C.MmsConnection_readNamedVariableListValuesAsync(conn, nil, &cError, cDomain, cList, C.bool(specification), (C.MmsConnection_ReadVariableHandler)(C.readVariableAsyncBridge), unsafe.Pointer(ctx))
@@ -1217,10 +1221,10 @@ func (c *MmsConnection) WriteArrayElements(domainID, itemID string, index, numbe
 	if value == nil || value.c == nil {
 		return 0, UserProvidedInvalidArgument
 	}
-	cDomain := C.CString(domainID)
-	defer C.free(unsafe.Pointer(cDomain))
-	cItem := C.CString(itemID)
-	defer C.free(unsafe.Pointer(cItem))
+	cDomain, freecDomain := allocCString(domainID)
+	defer freecDomain()
+	cItem, freecItem := allocCString(itemID)
+	defer freecItem()
 	var cError C.MmsError
 	accessErr := C.MmsConnection_writeArrayElements(c.c, &cError, cDomain, cItem, C.int(index), C.int(numberOfElements), value.c)
 	if err := GetMmsError(cError); err != nil {
@@ -1242,12 +1246,13 @@ func (c *MmsConnection) WriteNamedVariableList(domainID, listName string, values
 		return UserProvidedInvalidArgument
 	}
 	var cDomain *C.char
+	var freeCDomain func()
 	if domainID != "" {
-		cDomain = C.CString(domainID)
-		defer C.free(unsafe.Pointer(cDomain))
+		cDomain, freeCDomain = allocCString(domainID)
+		defer freeCDomain()
 	}
-	cList := C.CString(listName)
-	defer C.free(unsafe.Pointer(cList))
+	cList, freecList := allocCString(listName)
+	defer freecList()
 	clist := C.LinkedList_create()
 	for _, v := range values {
 		if v != nil && v.c != nil {
@@ -1283,12 +1288,13 @@ func (c *MmsConnection) GetNamedVariableListAttributes(domainID, listName string
 		return nil, NotConnected
 	}
 	var cDomain *C.char
+	var freeCDomain func()
 	if domainID != "" {
-		cDomain = C.CString(domainID)
-		defer C.free(unsafe.Pointer(cDomain))
+		cDomain, freeCDomain = allocCString(domainID)
+		defer freeCDomain()
 	}
-	cList := C.CString(listName)
-	defer C.free(unsafe.Pointer(cList))
+	cList, freecList := allocCString(listName)
+	defer freecList()
 	var cError C.MmsError
 	var cDeletable C.bool
 	list := C.MmsConnection_readNamedVariableListDirectory(c.c, &cError, cDomain, cList, &cDeletable)
@@ -1337,9 +1343,10 @@ func (c *MmsConnection) GetDomainVariableListNames(domainID string) ([]string, e
 		return nil, NotConnected
 	}
 	var cDomain *C.char
+	var freeCDomain func()
 	if domainID != "" {
-		cDomain = C.CString(domainID)
-		defer C.free(unsafe.Pointer(cDomain))
+		cDomain, freeCDomain = allocCString(domainID)
+		defer freeCDomain()
 	}
 	var cError C.MmsError
 	list := C.MmsConnection_getDomainVariableListNames(c.c, &cError, cDomain)
@@ -1368,9 +1375,10 @@ func (c *MmsConnection) GetDomainJournals(domainID string) ([]string, error) {
 		return nil, NotConnected
 	}
 	var cDomain *C.char
+	var freeCDomain func()
 	if domainID != "" {
-		cDomain = C.CString(domainID)
-		defer C.free(unsafe.Pointer(cDomain))
+		cDomain, freeCDomain = allocCString(domainID)
+		defer freeCDomain()
 	}
 	var cError C.MmsError
 	list := C.MmsConnection_getDomainJournals(c.c, &cError, cDomain)
@@ -1433,9 +1441,10 @@ func (c *MmsConnection) GetVMDVariableNamesAsync(continueAfter string, callback 
 		return UserProvidedInvalidArgument
 	}
 	var cCont *C.char
+	var freeCCont func()
 	if continueAfter != "" {
-		cCont = C.CString(continueAfter)
-		defer C.free(unsafe.Pointer(cCont))
+		cCont, freeCCont = allocCString(continueAfter)
+		defer freeCCont()
 	}
 	ctx := &getNameListAsyncCtx{callback: callback}
 	var cError C.MmsError
@@ -1459,9 +1468,10 @@ func (c *MmsConnection) GetDomainNamesAsync(continueAfter string, callback func(
 		return UserProvidedInvalidArgument
 	}
 	var cCont *C.char
+	var freeCCont func()
 	if continueAfter != "" {
-		cCont = C.CString(continueAfter)
-		defer C.free(unsafe.Pointer(cCont))
+		cCont, freeCCont = allocCString(continueAfter)
+		defer freeCCont()
 	}
 	ctx := &getNameListAsyncCtx{callback: callback}
 	var cError C.MmsError
@@ -1485,14 +1495,16 @@ func (c *MmsConnection) GetDomainVariableNamesAsync(domainID, continueAfter stri
 		return UserProvidedInvalidArgument
 	}
 	var cDomain *C.char
+	var freeCDomain func()
 	if domainID != "" {
-		cDomain = C.CString(domainID)
-		defer C.free(unsafe.Pointer(cDomain))
+		cDomain, freeCDomain = allocCString(domainID)
+		defer freeCDomain()
 	}
 	var cCont *C.char
+	var freeCCont func()
 	if continueAfter != "" {
-		cCont = C.CString(continueAfter)
-		defer C.free(unsafe.Pointer(cCont))
+		cCont, freeCCont = allocCString(continueAfter)
+		defer freeCCont()
 	}
 	ctx := &getNameListAsyncCtx{callback: callback}
 	var cError C.MmsError
@@ -1516,14 +1528,16 @@ func (c *MmsConnection) GetDomainVariableListNamesAsync(domainID, continueAfter 
 		return UserProvidedInvalidArgument
 	}
 	var cDomain *C.char
+	var freeCDomain func()
 	if domainID != "" {
-		cDomain = C.CString(domainID)
-		defer C.free(unsafe.Pointer(cDomain))
+		cDomain, freeCDomain = allocCString(domainID)
+		defer freeCDomain()
 	}
 	var cCont *C.char
+	var freeCCont func()
 	if continueAfter != "" {
-		cCont = C.CString(continueAfter)
-		defer C.free(unsafe.Pointer(cCont))
+		cCont, freeCCont = allocCString(continueAfter)
+		defer freeCCont()
 	}
 	ctx := &getNameListAsyncCtx{callback: callback}
 	var cError C.MmsError
@@ -1547,14 +1561,16 @@ func (c *MmsConnection) GetDomainJournalsAsync(domainID, continueAfter string, c
 		return UserProvidedInvalidArgument
 	}
 	var cDomain *C.char
+	var freeCDomain func()
 	if domainID != "" {
-		cDomain = C.CString(domainID)
-		defer C.free(unsafe.Pointer(cDomain))
+		cDomain, freeCDomain = allocCString(domainID)
+		defer freeCDomain()
 	}
 	var cCont *C.char
+	var freeCCont func()
 	if continueAfter != "" {
-		cCont = C.CString(continueAfter)
-		defer C.free(unsafe.Pointer(cCont))
+		cCont, freeCCont = allocCString(continueAfter)
+		defer freeCCont()
 	}
 	ctx := &getNameListAsyncCtx{callback: callback}
 	var cError C.MmsError
@@ -1578,9 +1594,10 @@ func (c *MmsConnection) GetVariableListNamesAssociationSpecificAsync(continueAft
 		return UserProvidedInvalidArgument
 	}
 	var cCont *C.char
+	var freeCCont func()
 	if continueAfter != "" {
-		cCont = C.CString(continueAfter)
-		defer C.free(unsafe.Pointer(cCont))
+		cCont, freeCCont = allocCString(continueAfter)
+		defer freeCCont()
 	}
 	ctx := &getNameListAsyncCtx{callback: callback}
 	var cError C.MmsError
@@ -1615,10 +1632,10 @@ func (c *MmsConnection) ObtainFile(sourceFile, destinationFile string) error {
 	if c.c == nil {
 		return NotConnected
 	}
-	cSrc := C.CString(sourceFile)
-	defer C.free(unsafe.Pointer(cSrc))
-	cDst := C.CString(destinationFile)
-	defer C.free(unsafe.Pointer(cDst))
+	cSrc, freecSrc := allocCString(sourceFile)
+	defer freecSrc()
+	cDst, freecDst := allocCString(destinationFile)
+	defer freecDst()
 	var cError C.MmsError
 	C.MmsConnection_obtainFile(c.c, &cError, cSrc, cDst)
 	return GetMmsError(cError)
@@ -1631,10 +1648,10 @@ func (c *MmsConnection) RenameFile(currentName, newName string) error {
 	if c.c == nil {
 		return NotConnected
 	}
-	cCur := C.CString(currentName)
-	defer C.free(unsafe.Pointer(cCur))
-	cNew := C.CString(newName)
-	defer C.free(unsafe.Pointer(cNew))
+	cCur, freecCur := allocCString(currentName)
+	defer freecCur()
+	cNew, freecNew := allocCString(newName)
+	defer freecNew()
 	var cError C.MmsError
 	C.MmsConnection_fileRename(c.c, &cError, cCur, cNew)
 	return GetMmsError(cError)
@@ -1674,12 +1691,13 @@ func (c *MmsConnection) FileDirectoryAsync(fileSpecification, continueAfter stri
 	if callback == nil {
 		return UserProvidedInvalidArgument
 	}
-	cSpec := C.CString(fileSpecification)
-	defer C.free(unsafe.Pointer(cSpec))
+	cSpec, freecSpec := allocCString(fileSpecification)
+	defer freecSpec()
 	var cCont *C.char
+	var freeCCont func()
 	if continueAfter != "" {
-		cCont = C.CString(continueAfter)
-		defer C.free(unsafe.Pointer(cCont))
+		cCont, freeCCont = allocCString(continueAfter)
+		defer freeCCont()
 	}
 	ctx := &fileDirAsyncCtx{callback: callback}
 	fileDirAsyncRegistryMu.Lock()
@@ -1737,10 +1755,10 @@ func (c *MmsConnection) ReadJournal(domainID, journalName string, startingTime, 
 	if c.c == nil {
 		return nil, false, NotConnected
 	}
-	cDomain := C.CString(domainID)
-	defer C.free(unsafe.Pointer(cDomain))
-	cJournal := C.CString(journalName)
-	defer C.free(unsafe.Pointer(cJournal))
+	cDomain, freecDomain := allocCString(domainID)
+	defer freecDomain()
+	cJournal, freecJournal := allocCString(journalName)
+	defer freecJournal()
 	var startV, endV *C.MmsValue
 	if startingTime != nil {
 		startV = C.MmsValue_newBinaryTime(C.bool(false))
@@ -1799,10 +1817,10 @@ func (c *MmsConnection) ReadJournalTimeRangeAsync(domainID, journalName string, 
 	if callback == nil {
 		return UserProvidedInvalidArgument
 	}
-	cDomain := C.CString(domainID)
-	defer C.free(unsafe.Pointer(cDomain))
-	cJournal := C.CString(journalName)
-	defer C.free(unsafe.Pointer(cJournal))
+	cDomain, freecDomain := allocCString(domainID)
+	defer freecDomain()
+	cJournal, freecJournal := allocCString(journalName)
+	defer freecJournal()
 	startV := C.MmsValue_newBinaryTime(C.bool(false))
 	defer C.MmsValue_delete(startV)
 	C.MmsValue_setBinaryTime(startV, C.uint64_t(startTime))
@@ -1831,10 +1849,10 @@ func (c *MmsConnection) ReadJournalStartAfterAsync(domainID, journalName string,
 	if callback == nil {
 		return UserProvidedInvalidArgument
 	}
-	cDomain := C.CString(domainID)
-	defer C.free(unsafe.Pointer(cDomain))
-	cJournal := C.CString(journalName)
-	defer C.free(unsafe.Pointer(cJournal))
+	cDomain, freecDomain := allocCString(domainID)
+	defer freecDomain()
+	cJournal, freecJournal := allocCString(journalName)
+	defer freecJournal()
 	timeV := C.MmsValue_newBinaryTime(C.bool(false))
 	defer C.MmsValue_delete(timeV)
 	if timeSpec != nil {
@@ -1866,10 +1884,10 @@ func (c *MmsConnection) ReadJournalStartAfter(domainID, journalName string, entr
 	if c.c == nil {
 		return nil, false, NotConnected
 	}
-	cDomain := C.CString(domainID)
-	defer C.free(unsafe.Pointer(cDomain))
-	cJournal := C.CString(journalName)
-	defer C.free(unsafe.Pointer(cJournal))
+	cDomain, freecDomain := allocCString(domainID)
+	defer freecDomain()
+	cJournal, freecJournal := allocCString(journalName)
+	defer freecJournal()
 	timeV := C.MmsValue_newBinaryTime(C.bool(false))
 	defer C.MmsValue_delete(timeV)
 	if timeSpec != nil {

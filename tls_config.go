@@ -57,14 +57,14 @@ func (that *TLSConfig) SetEventHandler(handler *TLSConfigurationEventHandler) {
 }
 
 func (that *TLSConfig) createCTlsConfig() (C.TLSConfiguration, error) {
-	cKeyFile := C.CString(that.KeyFile)
-	defer C.free(unsafe.Pointer(cKeyFile))
+	cKeyFile, freeCKeyFile := allocCString(that.KeyFile)
+	defer freeCKeyFile()
 
-	cKeyPassword := C.CString(that.KeyPassword)
-	defer C.free(unsafe.Pointer(cKeyPassword))
+	cKeyPassword, freeCKeyPassword := allocCString(that.KeyPassword)
+	defer freeCKeyPassword()
 
-	cCertFile := C.CString(that.CertFile)
-	defer C.free(unsafe.Pointer(cCertFile))
+	cCertFile, freeCCertFile := allocCString(that.CertFile)
+	defer freeCCertFile()
 
 	tlsConfig := C.TLSConfiguration_create()
 	C.TLSConfiguration_setChainValidation(tlsConfig, C.bool(that.ChainValidation))
@@ -87,21 +87,21 @@ func (that *TLSConfig) createCTlsConfig() (C.TLSConfiguration, error) {
 	}
 
 	for _, caCert := range that.caCerts {
-		cCACert := C.CString(caCert)
+		cCACert, freeCCACert := allocCString(caCert)
 		if !bool(C.TLSConfiguration_addCACertificateFromFile(tlsConfig, cCACert)) {
-			C.free(unsafe.Pointer(cCACert))
+			freeCCACert()
 			return nil, fmt.Errorf("failed to load CA certificate %s", caCert)
 		}
-		C.free(unsafe.Pointer(cCACert))
+		freeCCACert()
 	}
 
 	for _, cert := range that.allowedCertificates {
-		cCert := C.CString(cert)
+		cCert, freeCCert := allocCString(cert)
 		if !bool(C.TLSConfiguration_addAllowedCertificateFromFile(tlsConfig, cCert)) {
-			C.free(unsafe.Pointer(cCert))
+			freeCCert()
 			return nil, fmt.Errorf("failed to load allowed certificate %s", cert)
 		}
-		C.free(unsafe.Pointer(cCert))
+		freeCCert()
 	}
 
 	return tlsConfig, nil

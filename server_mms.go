@@ -51,19 +51,19 @@ const (
 type MmsVariableListType int
 
 const (
-	MmsVarlistTypeDomainSpecific       MmsVariableListType = 0
-	MmsVarlistTypeAssociationSpecific  MmsVariableListType = 1
-	MmsVarlistTypeVmdSpecific          MmsVariableListType = 2
+	MmsVarlistTypeDomainSpecific      MmsVariableListType = 0
+	MmsVarlistTypeAssociationSpecific MmsVariableListType = 1
+	MmsVarlistTypeVmdSpecific         MmsVariableListType = 2
 )
 
 // MmsGetNameListType indicates the type of GetNameList request (domains, journals, data sets, or data).
 type MmsGetNameListType int
 
 const (
-	MmsGetNameListDomains   MmsGetNameListType = 0
-	MmsGetNameListJournals  MmsGetNameListType = 1
-	MmsGetNameListDataSets  MmsGetNameListType = 2
-	MmsGetNameListData      MmsGetNameListType = 3
+	MmsGetNameListDomains  MmsGetNameListType = 0
+	MmsGetNameListJournals MmsGetNameListType = 1
+	MmsGetNameListDataSets MmsGetNameListType = 2
+	MmsGetNameListData     MmsGetNameListType = 3
 )
 
 // VariableListAccessHandler is called when a client accesses a named variable list. Return nil to allow, or an MmsError to deny.
@@ -71,8 +71,8 @@ const (
 type VariableListAccessHandler func(accessType MmsVariableListAccessType, listType MmsVariableListType, domainID, listName string) error
 
 var (
-	fileAccessHandlerRegistry    = make(map[int32]FileAccessHandler)
-	fileAccessHandlerRegistryMu  sync.Mutex
+	fileAccessHandlerRegistry   = make(map[int32]FileAccessHandler)
+	fileAccessHandlerRegistryMu sync.Mutex
 	fileAccessHandlerNextId     int32
 	fileAccessHandlerParamPool  []*fileAccessHandlerParam // keep param pointers alive for C callback
 
@@ -81,25 +81,25 @@ var (
 	variableListAccessNextId     int32
 	variableListAccessParamPool  []*variableListAccessParam
 
-	readJournalRegistry    = make(map[int32]ReadJournalHandler)
-	readJournalRegistryMu  sync.Mutex
-	readJournalNextId      int32
-	readJournalParamPool   []*readJournalParam
+	readJournalRegistry   = make(map[int32]ReadJournalHandler)
+	readJournalRegistryMu sync.Mutex
+	readJournalNextId     int32
+	readJournalParamPool  []*readJournalParam
 
-	getNameListRegistry    = make(map[int32]GetNameListHandler)
-	getNameListRegistryMu  sync.Mutex
-	getNameListNextId      int32
-	getNameListParamPool   []*getNameListParam
+	getNameListRegistry   = make(map[int32]GetNameListHandler)
+	getNameListRegistryMu sync.Mutex
+	getNameListNextId     int32
+	getNameListParamPool  []*getNameListParam
 
-	obtainFileRegistry    = make(map[int32]ObtainFileHandler)
-	obtainFileRegistryMu   sync.Mutex
-	obtainFileNextId       int32
-	obtainFileParamPool    []*obtainFileParam
+	obtainFileRegistry   = make(map[int32]ObtainFileHandler)
+	obtainFileRegistryMu sync.Mutex
+	obtainFileNextId     int32
+	obtainFileParamPool  []*obtainFileParam
 
-	getFileCompleteRegistry    = make(map[int32]GetFileCompleteHandler)
-	getFileCompleteRegistryMu  sync.Mutex
-	getFileCompleteNextId      int32
-	getFileCompleteParamPool   []*getFileCompleteParam
+	getFileCompleteRegistry   = make(map[int32]GetFileCompleteHandler)
+	getFileCompleteRegistryMu sync.Mutex
+	getFileCompleteNextId     int32
+	getFileCompleteParamPool  []*getFileCompleteParam
 )
 
 type variableListAccessParam struct {
@@ -452,8 +452,8 @@ func (is *IedServer) EnableJournalService(enable bool) {
 // SetFilestoreBasepath sets the (virtual) filestore base path for MMS file services.
 // Call before Start. GetFilestoreBasepath returns the last value set here (the C API does not expose a getter).
 func (is *IedServer) SetFilestoreBasepath(basepath string) {
-	cPath := C.CString(basepath)
-	defer C.free(unsafe.Pointer(cPath))
+	cPath, freeCPath := allocCString(basepath)
+	defer freeCPath()
 	C.IedServer_setFilestoreBasepath(is.server, cPath)
 	is.filestoreBasepath = basepath
 }

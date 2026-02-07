@@ -37,8 +37,8 @@ func NewSVPublisher(conf SvPublisherConf) *SVPublisher {
 	for i := 0; i < len(conf.DstAddr); i++ {
 		parameters.dstAddress[i] = C.uint8_t(conf.DstAddr[i])
 	}
-	ether := C.CString(conf.EtherName)
-	defer C.free(unsafe.Pointer(ether))
+	ether, freeEther := allocCString(conf.EtherName)
+	defer freeEther()
 	cSvPublisher := C.SVPublisher_create(&parameters, ether)
 
 	return &SVPublisher{
