@@ -231,6 +231,18 @@ func (is *IedServer) SetMaxDomainSpecificDataSets(maxDataSets int) {
 	C.MmsServer_setMaxDomainSpecificDataSets(mmsServer, C.int(maxDataSets))
 }
 
+// SetMaxDataSetEntries sets the maximum number of data set entries for dynamic data sets.
+func (is *IedServer) SetMaxDataSetEntries(maxDataSetEntries int) {
+	mmsServer := C.IedServer_getMmsServer(is.server)
+	C.MmsServer_setMaxDataSetEntries(mmsServer, C.int(maxDataSetEntries))
+}
+
+// EnableJournalService enables or disables the MMS journal service at runtime. Requires CONFIG_MMS_SERVER_CONFIG_SERVICES_AT_RUNTIME in the C library.
+func (is *IedServer) EnableJournalService(enable bool) {
+	mmsServer := C.IedServer_getMmsServer(is.server)
+	C.MmsServer_enableJournalService(mmsServer, C.bool(enable))
+}
+
 // SetFilestoreBasepath sets the (virtual) filestore base path for MMS file services.
 // Call before Start. GetFilestoreBasepath returns the last value set here (the C API does not expose a getter).
 func (is *IedServer) SetFilestoreBasepath(basepath string) {

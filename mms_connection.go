@@ -18,6 +18,9 @@ extern void readNVLDirectoryAsyncBridge(uint32_t invokeId, void* parameter, MmsE
 extern void getVariableAccessAttributesAsyncBridge(uint32_t invokeId, void* parameter, MmsError mmsError, MmsVariableSpecification* spec);
 extern void identifyAsyncBridge(uint32_t invokeId, void* parameter, MmsError mmsError, char* vendorName, char* modelName, char* revision);
 extern void readJournalAsyncBridge(uint32_t invokeId, void* parameter, MmsError mmsError, LinkedList journalEntries, _Bool moreFollows);
+extern void concludeAbortBridge(void* parameter, MmsError mmsError, _Bool success);
+extern void getNameListAsyncBridge(uint32_t invokeId, void* parameter, MmsError mmsError, LinkedList nameList, _Bool moreFollows);
+extern void informationReportBridge(void* parameter, char* domainName, char* variableListName, MmsValue* value, _Bool isVariableListName);
 
 static void destroyMmsValueLinkedListLocal(LinkedList L) {
 	if (L) LinkedList_destroyDeep(L, (LinkedListValueDeleteFunction)MmsValue_delete);
@@ -59,6 +62,9 @@ type rawMessageCtx struct {
 var (
 	rawMessageRegistry   = make(map[C.MmsConnection]*rawMessageCtx)
 	rawMessageRegistryMu sync.Mutex
+
+	infoReportRegistry   = make(map[C.MmsConnection]func(domainName, variableListName string, value *MmsValue, isVariableListName bool))
+	infoReportRegistryMu sync.Mutex
 )
 
 // fileDirAsyncCtx holds state for an in-flight FileDirectoryAsync; keyed by connection in fileDirAsyncRegistry.
@@ -89,6 +95,19 @@ func NewMmsConnectionSecure(tlsConfig *TLSConfiguration) *MmsConnection {
 	}
 	defer C.TLSConfiguration_destroy(cTls)
 	return &MmsConnection{c: C.MmsConnection_createSecure(cTls)}
+}
+
+// NewMmsConnectionNonThreaded creates an MmsConnection that does not use a background thread; call Tick() periodically. tlsConfig may be nil for non-TLS.
+func NewMmsConnectionNonThreaded(tlsConfig *TLSConfiguration) *MmsConnection {
+	var cTls C.TLSConfiguration
+	if tlsConfig != nil {
+		cTls = buildCTLSConfiguration(tlsConfig)
+		if cTls == nil {
+			return nil
+		}
+		defer C.TLSConfiguration_destroy(cTls)
+	}
+	return &MmsConnection{c: C.MmsConnection_createNonThreaded(cTls)}
 }
 
 func buildCTLSConfiguration(t *TLSConfiguration) C.TLSConfiguration {
@@ -176,6 +195,15 @@ func (c *MmsConnection) GetRequestTimeout() uint32 {
 	return uint32(C.MmsConnection_getRequestTimeout(c.c))
 }
 
+// SetMaxOutstandingCalls sets the maximum outstanding calls (calling and called) for this connection.
+func (c *MmsConnection) SetMaxOutstandingCalls(calling, called int) {
+	c.connMu.Lock()
+	defer c.connMu.Unlock()
+	if c.c != nil {
+		C.MmsConnnection_setMaxOutstandingCalls(c.c, C.int(calling), C.int(called))
+	}
+}
+
 // SetLocalDetail sets the maximum MMS PDU size (local detail) for this connection.
 func (c *MmsConnection) SetLocalDetail(localDetail int32) {
 	c.connMu.Lock()
@@ -218,6 +246,36 @@ func (c *MmsConnection) GetIsoConnectionParameters() *IsoConnectionParameters {
 	out.RemoteSSelector = sSelectorToSlice(p.remoteSSelector)
 	out.RemotePSelector = pSelectorToSlice(p.remotePSelector)
 	return out
+}
+
+// SetFilestoreBasepath sets the virtual filestore basepath for MMS file services (client side). Requires CONFIG_SET_FILESTORE_BASEPATH_AT_RUNTIME in the C library.
+func (c *MmsConnection) SetFilestoreBasepath(basepath string) {
+	c.connMu.Lock()
+	defer c.connMu.Unlock()
+	if c.c == nil {
+		return
+	}
+	cPath := C.CString(basepath)
+	defer C.free(unsafe.Pointer(cPath))
+	C.MmsConnection_setFilestoreBasepath(c.c, cPath)
+}
+
+// SetInformationReportHandler sets the handler for MMS information reports (unsolicited updates). Pass nil to clear.
+func (c *MmsConnection) SetInformationReportHandler(callback func(domainName, variableListName string, value *MmsValue, isVariableListName bool)) {
+	c.connMu.Lock()
+	conn := c.c
+	if conn != nil && callback != nil {
+		infoReportRegistryMu.Lock()
+		infoReportRegistry[conn] = callback
+		infoReportRegistryMu.Unlock()
+		C.MmsConnection_setInformationReportHandler(conn, (C.MmsInformationReportHandler)(C.informationReportBridge), unsafe.Pointer(conn))
+	} else if conn != nil {
+		C.MmsConnection_setInformationReportHandler(conn, nil, nil)
+		infoReportRegistryMu.Lock()
+		delete(infoReportRegistry, conn)
+		infoReportRegistryMu.Unlock()
+	}
+	c.connMu.Unlock()
 }
 
 // SetRawMessageHandler sets a callback that receives every raw MMS message (sent or received). Pass nil to clear.
@@ -475,6 +533,49 @@ func (c *MmsConnection) Conclude() error {
 	return GetMmsError(cError)
 }
 
+// Tick processes connection events for non-threaded mode. Call periodically. Returns true if more work is pending.
+func (c *MmsConnection) Tick() bool {
+	c.connMu.Lock()
+	defer c.connMu.Unlock()
+	if c.c == nil {
+		return false
+	}
+	return bool(C.MmsConnection_tick(c.c))
+}
+
+// AbortAsync sends the MMS abort service asynchronously. The C API does not provide a completion callback; it returns immediately.
+func (c *MmsConnection) AbortAsync() error {
+	c.connMu.Lock()
+	defer c.connMu.Unlock()
+	if c.c == nil {
+		return NotConnected
+	}
+	var cError C.MmsError
+	C.MmsConnection_abortAsync(c.c, &cError)
+	return GetMmsError(cError)
+}
+
+// ConcludeAsync sends the MMS conclude service asynchronously. The callback is invoked when the operation completes (may run from another goroutine).
+func (c *MmsConnection) ConcludeAsync(callback func(error)) error {
+	c.connMu.Lock()
+	if c.c == nil {
+		c.connMu.Unlock()
+		if callback != nil {
+			callback(NotConnected)
+		}
+		return NotConnected
+	}
+	conn := c.c
+	c.connMu.Unlock()
+	if callback == nil {
+		return UserProvidedInvalidArgument
+	}
+	ctx := &concludeAbortCtx{callback: callback}
+	var cError C.MmsError
+	C.MmsConnection_concludeAsync(conn, &cError, (C.MmsConnection_ConcludeAbortHandler)(C.concludeAbortBridge), unsafe.Pointer(ctx))
+	return GetMmsError(cError)
+}
+
 // --- Async read/write context and bridges ---
 
 type readVarAsyncCtx struct {
@@ -538,6 +639,90 @@ func genericServiceAsyncBridge(invokeId C.uint32_t, parameter unsafe.Pointer, mm
 		}
 		ctx.callback(err)
 	}
+}
+
+type concludeAbortCtx struct {
+	callback func(error)
+}
+
+//export concludeAbortBridge
+func concludeAbortBridge(parameter unsafe.Pointer, mmsError C.MmsError, success C._Bool) {
+	_ = success
+	if parameter == nil {
+		return
+	}
+	ctx := (*concludeAbortCtx)(parameter)
+	if ctx.callback != nil {
+		ctx.callback(GetMmsError(mmsError))
+	}
+}
+
+type getNameListAsyncCtx struct {
+	callback func(names []string, moreFollows bool, err error)
+}
+
+//export informationReportBridge
+func informationReportBridge(parameter unsafe.Pointer, domainName *C.char, variableListName *C.char, value *C.MmsValue, isVariableListName C._Bool) {
+	if parameter == nil {
+		if value != nil {
+			C.MmsValue_delete(value)
+		}
+		return
+	}
+	conn := (C.MmsConnection)(parameter)
+	infoReportRegistryMu.Lock()
+	cb := infoReportRegistry[conn]
+	infoReportRegistryMu.Unlock()
+	if cb == nil {
+		if value != nil {
+			C.MmsValue_delete(value)
+		}
+		return
+	}
+	d, v := "", ""
+	if domainName != nil {
+		d = C.GoString(domainName)
+	}
+	if variableListName != nil {
+		v = C.GoString(variableListName)
+	}
+	var goVal *MmsValue
+	if value != nil {
+		goVal = CMmsValueToMmsValue(value)
+		C.MmsValue_delete(value)
+	}
+	cb(d, v, goVal, bool(isVariableListName))
+}
+
+//export getNameListAsyncBridge
+func getNameListAsyncBridge(invokeId C.uint32_t, parameter unsafe.Pointer, mmsError C.MmsError, nameList C.LinkedList, moreFollows C._Bool) {
+	_ = invokeId
+	if parameter == nil {
+		if nameList != nil {
+			C.destroyCharPtrLinkedList(nameList)
+		}
+		return
+	}
+	ctx := (*getNameListAsyncCtx)(parameter)
+	cb := ctx.callback
+	if cb == nil {
+		if nameList != nil {
+			C.destroyCharPtrLinkedList(nameList)
+		}
+		return
+	}
+	err := GetMmsError(mmsError)
+	var names []string
+	if err == nil && nameList != nil {
+		for node := nameList; node != nil; node = C.LinkedList_getNext(node) {
+			data := C.LinkedList_getData(node)
+			if data != nil {
+				names = append(names, C.GoString((*C.char)(data)))
+			}
+		}
+		C.destroyCharPtrLinkedList(nameList)
+	}
+	cb(names, bool(moreFollows), err)
 }
 
 type readNVLDirectoryAsyncCtx struct {
@@ -971,6 +1156,30 @@ func (c *MmsConnection) ReadNamedVariableListValues(domainID, listName string, s
 	return CMmsValueToMmsValue(result), nil
 }
 
+// ReadArrayElements reads one or more elements of an array variable. startIndex is the first element; numberOfElements is the count (0 = single element at startIndex).
+// Returns the value (single element or array of elements) or nil on error. Caller does not free the result.
+func (c *MmsConnection) ReadArrayElements(domainID, itemID string, startIndex, numberOfElements uint32) (*MmsValue, error) {
+	c.connMu.Lock()
+	defer c.connMu.Unlock()
+	if c.c == nil {
+		return nil, NotConnected
+	}
+	cDomain := C.CString(domainID)
+	defer C.free(unsafe.Pointer(cDomain))
+	cItem := C.CString(itemID)
+	defer C.free(unsafe.Pointer(cItem))
+	var cError C.MmsError
+	result := C.MmsConnection_readArrayElements(c.c, &cError, cDomain, cItem, C.uint32_t(startIndex), C.uint32_t(numberOfElements))
+	if err := GetMmsError(cError); err != nil {
+		return nil, err
+	}
+	if result == nil {
+		return nil, nil
+	}
+	defer C.MmsValue_delete(result)
+	return CMmsValueToMmsValue(result), nil
+}
+
 // ReadNamedVariableListValuesAsync reads the values of a domain or VMD scoped named variable list asynchronously.
 // Pass domainID as "" for VMD scope. specification should be true for IEC 61850 compliant requests.
 // The callback receives a single MmsValue of type Array (Value is []*MmsValue) or nil on error. Caller does not own the value.
@@ -996,6 +1205,28 @@ func (c *MmsConnection) ReadNamedVariableListValuesAsync(domainID, listName stri
 	var cError C.MmsError
 	C.MmsConnection_readNamedVariableListValuesAsync(conn, nil, &cError, cDomain, cList, C.bool(specification), (C.MmsConnection_ReadVariableHandler)(C.readVariableAsyncBridge), unsafe.Pointer(ctx))
 	return GetMmsError(cError)
+}
+
+// WriteArrayElements writes one or more array elements. index is the first element; numberOfElements is the count (0 = single element). value is the data to write (MmsValueRef, not consumed).
+func (c *MmsConnection) WriteArrayElements(domainID, itemID string, index, numberOfElements int, value *MmsValueRef) (MmsDataAccessError, error) {
+	c.connMu.Lock()
+	defer c.connMu.Unlock()
+	if c.c == nil {
+		return 0, NotConnected
+	}
+	if value == nil || value.c == nil {
+		return 0, UserProvidedInvalidArgument
+	}
+	cDomain := C.CString(domainID)
+	defer C.free(unsafe.Pointer(cDomain))
+	cItem := C.CString(itemID)
+	defer C.free(unsafe.Pointer(cItem))
+	var cError C.MmsError
+	accessErr := C.MmsConnection_writeArrayElements(c.c, &cError, cDomain, cItem, C.int(index), C.int(numberOfElements), value.c)
+	if err := GetMmsError(cError); err != nil {
+		return 0, err
+	}
+	return MmsDataAccessError(accessErr), nil
 }
 
 // WriteNamedVariableList writes values to a domain or VMD scoped named variable list.
@@ -1160,6 +1391,203 @@ func (c *MmsConnection) GetDomainJournals(domainID string) ([]string, error) {
 	return names, nil
 }
 
+// GetVMDVariableNames returns the VMD-scope variable names. Pass "" for continueAfter in async version.
+func (c *MmsConnection) GetVMDVariableNames() ([]string, error) {
+	c.connMu.Lock()
+	defer c.connMu.Unlock()
+	if c.c == nil {
+		return nil, NotConnected
+	}
+	var cError C.MmsError
+	list := C.MmsConnection_getVMDVariableNames(c.c, &cError)
+	if err := GetMmsError(cError); err != nil {
+		return nil, err
+	}
+	if list == nil {
+		return nil, nil
+	}
+	defer C.destroyCharPtrLinkedList(list)
+	var names []string
+	for node := list; node != nil; node = C.LinkedList_getNext(node) {
+		data := C.LinkedList_getData(node)
+		if data != nil {
+			names = append(names, C.GoString((*C.char)(data)))
+		}
+	}
+	return names, nil
+}
+
+// GetVMDVariableNamesAsync returns VMD variable names asynchronously. continueAfter is "" to start.
+func (c *MmsConnection) GetVMDVariableNamesAsync(continueAfter string, callback func(names []string, moreFollows bool, err error)) error {
+	c.connMu.Lock()
+	if c.c == nil {
+		c.connMu.Unlock()
+		if callback != nil {
+			callback(nil, false, NotConnected)
+		}
+		return NotConnected
+	}
+	conn := c.c
+	c.connMu.Unlock()
+	if callback == nil {
+		return UserProvidedInvalidArgument
+	}
+	var cCont *C.char
+	if continueAfter != "" {
+		cCont = C.CString(continueAfter)
+		defer C.free(unsafe.Pointer(cCont))
+	}
+	ctx := &getNameListAsyncCtx{callback: callback}
+	var cError C.MmsError
+	C.MmsConnection_getVMDVariableNamesAsync(conn, nil, &cError, cCont, (C.MmsConnection_GetNameListHandler)(C.getNameListAsyncBridge), unsafe.Pointer(ctx))
+	return GetMmsError(cError)
+}
+
+// GetDomainNamesAsync returns domain names asynchronously. continueAfter is "" to start.
+func (c *MmsConnection) GetDomainNamesAsync(continueAfter string, callback func(names []string, moreFollows bool, err error)) error {
+	c.connMu.Lock()
+	if c.c == nil {
+		c.connMu.Unlock()
+		if callback != nil {
+			callback(nil, false, NotConnected)
+		}
+		return NotConnected
+	}
+	conn := c.c
+	c.connMu.Unlock()
+	if callback == nil {
+		return UserProvidedInvalidArgument
+	}
+	var cCont *C.char
+	if continueAfter != "" {
+		cCont = C.CString(continueAfter)
+		defer C.free(unsafe.Pointer(cCont))
+	}
+	ctx := &getNameListAsyncCtx{callback: callback}
+	var cError C.MmsError
+	C.MmsConnection_getDomainNamesAsync(conn, nil, &cError, cCont, nil, (C.MmsConnection_GetNameListHandler)(C.getNameListAsyncBridge), unsafe.Pointer(ctx))
+	return GetMmsError(cError)
+}
+
+// GetDomainVariableNamesAsync returns variable names in a domain asynchronously. continueAfter is "" to start.
+func (c *MmsConnection) GetDomainVariableNamesAsync(domainID, continueAfter string, callback func(names []string, moreFollows bool, err error)) error {
+	c.connMu.Lock()
+	if c.c == nil {
+		c.connMu.Unlock()
+		if callback != nil {
+			callback(nil, false, NotConnected)
+		}
+		return NotConnected
+	}
+	conn := c.c
+	c.connMu.Unlock()
+	if callback == nil {
+		return UserProvidedInvalidArgument
+	}
+	var cDomain *C.char
+	if domainID != "" {
+		cDomain = C.CString(domainID)
+		defer C.free(unsafe.Pointer(cDomain))
+	}
+	var cCont *C.char
+	if continueAfter != "" {
+		cCont = C.CString(continueAfter)
+		defer C.free(unsafe.Pointer(cCont))
+	}
+	ctx := &getNameListAsyncCtx{callback: callback}
+	var cError C.MmsError
+	C.MmsConnection_getDomainVariableNamesAsync(conn, nil, &cError, cDomain, cCont, nil, (C.MmsConnection_GetNameListHandler)(C.getNameListAsyncBridge), unsafe.Pointer(ctx))
+	return GetMmsError(cError)
+}
+
+// GetDomainVariableListNamesAsync returns named variable list names in a domain asynchronously. continueAfter is "" to start.
+func (c *MmsConnection) GetDomainVariableListNamesAsync(domainID, continueAfter string, callback func(names []string, moreFollows bool, err error)) error {
+	c.connMu.Lock()
+	if c.c == nil {
+		c.connMu.Unlock()
+		if callback != nil {
+			callback(nil, false, NotConnected)
+		}
+		return NotConnected
+	}
+	conn := c.c
+	c.connMu.Unlock()
+	if callback == nil {
+		return UserProvidedInvalidArgument
+	}
+	var cDomain *C.char
+	if domainID != "" {
+		cDomain = C.CString(domainID)
+		defer C.free(unsafe.Pointer(cDomain))
+	}
+	var cCont *C.char
+	if continueAfter != "" {
+		cCont = C.CString(continueAfter)
+		defer C.free(unsafe.Pointer(cCont))
+	}
+	ctx := &getNameListAsyncCtx{callback: callback}
+	var cError C.MmsError
+	C.MmsConnection_getDomainVariableListNamesAsync(conn, nil, &cError, cDomain, cCont, nil, (C.MmsConnection_GetNameListHandler)(C.getNameListAsyncBridge), unsafe.Pointer(ctx))
+	return GetMmsError(cError)
+}
+
+// GetDomainJournalsAsync returns journal names in a domain asynchronously. continueAfter is "" to start.
+func (c *MmsConnection) GetDomainJournalsAsync(domainID, continueAfter string, callback func(names []string, moreFollows bool, err error)) error {
+	c.connMu.Lock()
+	if c.c == nil {
+		c.connMu.Unlock()
+		if callback != nil {
+			callback(nil, false, NotConnected)
+		}
+		return NotConnected
+	}
+	conn := c.c
+	c.connMu.Unlock()
+	if callback == nil {
+		return UserProvidedInvalidArgument
+	}
+	var cDomain *C.char
+	if domainID != "" {
+		cDomain = C.CString(domainID)
+		defer C.free(unsafe.Pointer(cDomain))
+	}
+	var cCont *C.char
+	if continueAfter != "" {
+		cCont = C.CString(continueAfter)
+		defer C.free(unsafe.Pointer(cCont))
+	}
+	ctx := &getNameListAsyncCtx{callback: callback}
+	var cError C.MmsError
+	C.MmsConnection_getDomainJournalsAsync(conn, nil, &cError, cDomain, cCont, (C.MmsConnection_GetNameListHandler)(C.getNameListAsyncBridge), unsafe.Pointer(ctx))
+	return GetMmsError(cError)
+}
+
+// GetVariableListNamesAssociationSpecificAsync returns association-specific variable list names asynchronously. continueAfter is "" to start.
+func (c *MmsConnection) GetVariableListNamesAssociationSpecificAsync(continueAfter string, callback func(names []string, moreFollows bool, err error)) error {
+	c.connMu.Lock()
+	if c.c == nil {
+		c.connMu.Unlock()
+		if callback != nil {
+			callback(nil, false, NotConnected)
+		}
+		return NotConnected
+	}
+	conn := c.c
+	c.connMu.Unlock()
+	if callback == nil {
+		return UserProvidedInvalidArgument
+	}
+	var cCont *C.char
+	if continueAfter != "" {
+		cCont = C.CString(continueAfter)
+		defer C.free(unsafe.Pointer(cCont))
+	}
+	ctx := &getNameListAsyncCtx{callback: callback}
+	var cError C.MmsError
+	C.MmsConnection_getVariableListNamesAssociationSpecificAsync(conn, nil, &cError, cCont, (C.MmsConnection_GetNameListHandler)(C.getNameListAsyncBridge), unsafe.Pointer(ctx))
+	return GetMmsError(cError)
+}
+
 // GetServerStatus returns the MMS server status (VMD logical and physical status).
 func (c *MmsConnection) GetServerStatus(extendedDerivation bool) (*MmsServerStatus, error) {
 	c.connMu.Lock()
@@ -1209,6 +1637,24 @@ func (c *MmsConnection) RenameFile(currentName, newName string) error {
 	defer C.free(unsafe.Pointer(cNew))
 	var cError C.MmsError
 	C.MmsConnection_fileRename(c.c, &cError, cCur, cNew)
+	return GetMmsError(cError)
+}
+
+// SendRawData sends raw data on the connection (for test purposes). buffer is the payload to send.
+func (c *MmsConnection) SendRawData(buffer []byte) error {
+	c.connMu.Lock()
+	defer c.connMu.Unlock()
+	if c.c == nil {
+		return NotConnected
+	}
+	var cError C.MmsError
+	var cBuf *C.uint8_t
+	cSize := C.int(0)
+	if len(buffer) > 0 {
+		cBuf = (*C.uint8_t)(unsafe.Pointer(&buffer[0]))
+		cSize = C.int(len(buffer))
+	}
+	C.MmsConnection_sendRawData(c.c, &cError, cBuf, cSize)
 	return GetMmsError(cError)
 }
 
