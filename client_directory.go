@@ -2,9 +2,6 @@ package iec61850
 
 // #include <iec61850_client.h>
 import "C"
-import (
-	"unsafe"
-)
 
 // DirectoryEntry represents a single directory entry with optional FC annotation
 type DirectoryEntry struct {
@@ -94,8 +91,8 @@ func (c *Client) GetLogicalDeviceNames() ([]string, error) {
 func (c *Client) GetLogicalDeviceDirectory(ldName string) ([]string, error) {
 	var clientError C.IedClientError
 
-	cLdName := C.CString(ldName)
-	defer C.free(unsafe.Pointer(cLdName))
+	cLdName, freeCLdName := allocCString(ldName)
+	defer freeCLdName()
 
 	linkedList := C.IedConnection_getLogicalDeviceDirectory(c.conn, &clientError, cLdName)
 	if err := GetIedClientError(clientError); err != nil {
@@ -137,8 +134,8 @@ func (c *Client) GetLogicalDeviceDirectory(ldName string) ([]string, error) {
 func (c *Client) GetLogicalNodeDirectory(lnRef string, acsiClass ACSIClass) ([]string, error) {
 	var clientError C.IedClientError
 
-	cLnRef := C.CString(lnRef)
-	defer C.free(unsafe.Pointer(cLnRef))
+	cLnRef, freeCLnRef := allocCString(lnRef)
+	defer freeCLnRef()
 
 	linkedList := C.IedConnection_getLogicalNodeDirectory(c.conn, &clientError, cLnRef, C.ACSIClass(acsiClass))
 	if err := GetIedClientError(clientError); err != nil {
@@ -172,8 +169,8 @@ func (c *Client) GetDataSetDirectory(dataSetRef string) (*DataSetInfo, error) {
 	var clientError C.IedClientError
 	var isDeletable C.bool
 
-	cDataSetRef := C.CString(dataSetRef)
-	defer C.free(unsafe.Pointer(cDataSetRef))
+	cDataSetRef, freeCDataSetRef := allocCString(dataSetRef)
+	defer freeCDataSetRef()
 
 	linkedList := C.IedConnection_getDataSetDirectory(c.conn, &clientError, cDataSetRef, &isDeletable)
 	if err := GetIedClientError(clientError); err != nil {
@@ -213,8 +210,8 @@ func (c *Client) GetFileDirectory() ([]string, error) {
 func (c *Client) GetDataDirectory(dataRef string) ([]string, error) {
 	var clientError C.IedClientError
 
-	cDataRef := C.CString(dataRef)
-	defer C.free(unsafe.Pointer(cDataRef))
+	cDataRef, freeCDataRef := allocCString(dataRef)
+	defer freeCDataRef()
 
 	linkedList := C.IedConnection_getDataDirectory(c.conn, &clientError, cDataRef)
 	if err := GetIedClientError(clientError); err != nil {
@@ -247,8 +244,8 @@ func (c *Client) GetDataDirectory(dataRef string) ([]string, error) {
 func (c *Client) GetDataDirectoryWithFC(dataRef string) ([]DirectoryEntry, error) {
 	var clientError C.IedClientError
 
-	cDataRef := C.CString(dataRef)
-	defer C.free(unsafe.Pointer(cDataRef))
+	cDataRef, freeCDataRef := allocCString(dataRef)
+	defer freeCDataRef()
 
 	linkedList := C.IedConnection_getDataDirectoryFC(c.conn, &clientError, cDataRef)
 	if err := GetIedClientError(clientError); err != nil {
@@ -280,8 +277,8 @@ func (c *Client) GetDataDirectoryWithFC(dataRef string) ([]DirectoryEntry, error
 func (c *Client) GetDataDirectoryByFC(dataRef string, fc FC) ([]string, error) {
 	var clientError C.IedClientError
 
-	cDataRef := C.CString(dataRef)
-	defer C.free(unsafe.Pointer(cDataRef))
+	cDataRef, freeCDataRef := allocCString(dataRef)
+	defer freeCDataRef()
 
 	linkedList := C.IedConnection_getDataDirectoryByFC(c.conn, &clientError, cDataRef, C.FunctionalConstraint(fc))
 	if err := GetIedClientError(clientError); err != nil {
@@ -314,8 +311,8 @@ func (c *Client) GetDataDirectoryByFC(dataRef string, fc FC) ([]string, error) {
 func (c *Client) GetVariableSpecification(dataAttrRef string, fc FC) (*VariableSpec, error) {
 	var clientError C.IedClientError
 
-	cDataAttrRef := C.CString(dataAttrRef)
-	defer C.free(unsafe.Pointer(cDataAttrRef))
+	cDataAttrRef, freeCDataAttrRef := allocCString(dataAttrRef)
+	defer freeCDataAttrRef()
 
 	mmsSpec := C.IedConnection_getVariableSpecification(c.conn, &clientError, cDataAttrRef, C.FunctionalConstraint(fc))
 	if err := GetIedClientError(clientError); err != nil {
@@ -334,8 +331,8 @@ func (c *Client) GetVariableSpecification(dataAttrRef string, fc FC) (*VariableS
 func (c *Client) GetLogicalNodeVariables(lnRef string) ([]string, error) {
 	var clientError C.IedClientError
 
-	cLnRef := C.CString(lnRef)
-	defer C.free(unsafe.Pointer(cLnRef))
+	cLnRef, freeCLnRef := allocCString(lnRef)
+	defer freeCLnRef()
 
 	linkedList := C.IedConnection_getLogicalNodeVariables(c.conn, &clientError, cLnRef)
 	if err := GetIedClientError(clientError); err != nil {
@@ -362,8 +359,8 @@ func (c *Client) GetLogicalNodeVariables(lnRef string) ([]string, error) {
 func (c *Client) GetLogicalDeviceVariables(ldName string) ([]string, error) {
 	var clientError C.IedClientError
 
-	cLdName := C.CString(ldName)
-	defer C.free(unsafe.Pointer(cLdName))
+	cLdName, freeCLdName := allocCString(ldName)
+	defer freeCLdName()
 
 	linkedList := C.IedConnection_getLogicalDeviceVariables(c.conn, &clientError, cLdName)
 	if err := GetIedClientError(clientError); err != nil {
@@ -388,8 +385,8 @@ func (c *Client) GetLogicalDeviceVariables(ldName string) ([]string, error) {
 func (c *Client) GetLogicalDeviceDataSets(ldName string) ([]string, error) {
 	var clientError C.IedClientError
 
-	cLdName := C.CString(ldName)
-	defer C.free(unsafe.Pointer(cLdName))
+	cLdName, freeCLdName := allocCString(ldName)
+	defer freeCLdName()
 
 	linkedList := C.IedConnection_getLogicalDeviceDataSets(c.conn, &clientError, cLdName)
 	if err := GetIedClientError(clientError); err != nil {

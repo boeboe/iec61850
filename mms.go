@@ -4,12 +4,17 @@ package iec61850
 import "C"
 import (
 	"fmt"
-	"unsafe"
 
 	"github.com/spf13/cast"
 )
 
 func toMmsValue(mmsType MmsType, value interface{}) (*C.MmsValue, error) {
+	if ref, ok := value.(*MmsValueRef); ok {
+		if ref != nil && ref.c != nil {
+			return ref.c, nil
+		}
+		return nil, NullPointer
+	}
 	var (
 		mmsValue *C.MmsValue
 		err      error
@@ -110,11 +115,32 @@ func toGoValue(mmsValue *C.MmsValue, mmsType MmsType) (interface{}, error) {
 		}
 	case DataAccessError:
 		errorCode := C.MmsValue_getDataAccessError(mmsValue)
-		return nil, fmt.Errorf("failed to read value (error code: %d)", int(errorCode))
+		return MmsDataAccessError(errorCode), nil
 	default:
 		return nil, fmt.Errorf("unsupported type %d", mmsType)
 	}
 	return value, nil
+}
+
+// CMmsValueToMmsValue converts a C MmsValue to the high-level Go MmsValue.
+// The caller retains ownership of the C value (e.g. must call MmsValue_delete if the C layer transferred it).
+func CMmsValueToMmsValue(cVal *C.MmsValue) *MmsValue {
+	if cVal == nil {
+		return nil
+	}
+	mmsType := MmsType(C.MmsValue_getType(cVal))
+	if mmsType == Array || mmsType == Structure {
+		inner, err := toGoStructure(cVal, mmsType)
+		if err != nil {
+			return nil
+		}
+		return &MmsValue{Type: mmsType, Value: inner}
+	}
+	goVal, err := toGoValue(cVal, mmsType)
+	if err != nil {
+		return nil
+	}
+	return &MmsValue{Type: mmsType, Value: goVal}
 }
 
 func toGoStructure(mmsValue *C.MmsValue, mmsType MmsType) ([]*MmsValue, error) {
@@ -233,8 +259,8 @@ func toStringMmsValue(value interface{}) (*C.MmsValue, error) {
 	if err != nil {
 		return nil, err
 	}
-	stringValue := C.CString(v)
-	defer C.free(unsafe.Pointer(stringValue))
+	stringValue, freeStringValue := allocCString(v)
+	defer freeStringValue()
 	mmsValue := C.MmsValue_newMmsString(stringValue)
 	return mmsValue, nil
 }

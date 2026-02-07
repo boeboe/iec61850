@@ -27,8 +27,8 @@ type ModelNode struct {
 }
 
 func NewIedModel(name string) *IedModel {
-	cname := C.CString(name)
-	defer C.free(unsafe.Pointer(cname))
+	cname, freeCname := allocCString(name)
+	defer freeCname()
 	return &IedModel{
 		Model: C.IedModel_create(cname),
 	}
@@ -39,8 +39,8 @@ func (m *IedModel) Destroy() {
 }
 
 func (m *IedModel) GetModelNodeByObjectReference(objectRef string) *ModelNode {
-	cObjectRef := C.CString(objectRef)
-	defer C.free(unsafe.Pointer(cObjectRef))
+	cObjectRef, freeCObjectRef := allocCString(objectRef)
+	defer freeCObjectRef()
 
 	do := C.IedModel_getModelNodeByObjectReference(m.Model, cObjectRef)
 	if do == nil {
@@ -50,8 +50,8 @@ func (m *IedModel) GetModelNodeByObjectReference(objectRef string) *ModelNode {
 }
 
 func (m *ModelNode) GetLogicalNode(node string) *LogicalNode {
-	cNode := C.CString(node)
-	defer C.free(unsafe.Pointer(cNode))
+	cNode, freeCNode := allocCString(node)
+	defer freeCNode()
 
 	logicalNode := C.LogicalDevice_getLogicalNode((*C.LogicalDevice)(m._modelNode), cNode)
 
@@ -72,9 +72,9 @@ func CreateModelFromConfigFileEx(filepath string) (*IedModel, error) {
 			return nil, err
 		}
 	}
-	cFilepath := C.CString(filepath)
+	cFilepath, freeCFilepath := allocCString(filepath)
 	// 释放内存
-	defer C.free(unsafe.Pointer(cFilepath))
+	defer freeCFilepath()
 	model := &IedModel{
 		Model: C.ConfigFileParser_createModelFromConfigFileEx(cFilepath),
 	}
@@ -86,8 +86,8 @@ type LogicalDevice struct {
 }
 
 func (m *IedModel) CreateLogicalDevice(name string) *LogicalDevice {
-	cname := C.CString(name)
-	defer C.free(unsafe.Pointer(cname))
+	cname, freeCname := allocCString(name)
+	defer freeCname()
 	return &LogicalDevice{
 		device: C.LogicalDevice_create(cname, m.Model),
 	}
@@ -98,8 +98,8 @@ type LogicalNode struct {
 }
 
 func (d *LogicalDevice) CreateLogicalNode(name string) *LogicalNode {
-	cname := C.CString(name)
-	defer C.free(unsafe.Pointer(cname))
+	cname, freeCname := allocCString(name)
+	defer freeCname()
 	return &LogicalNode{
 		node: C.LogicalNode_create(cname, d.device),
 	}
@@ -115,32 +115,32 @@ type DataObject struct {
 // APC: Analogue Process Control
 
 func (n *LogicalNode) CreateDataObjectCDC_ENS(name string) *DataObject {
-	cname := C.CString(name)
-	defer C.free(unsafe.Pointer(cname))
+	cname, freeCname := allocCString(name)
+	defer freeCname()
 	return &DataObject{
 		object: C.CDC_ENS_create(cname, (*C.ModelNode)(n.node), 0),
 	}
 }
 
 func (n *LogicalNode) CreateDataObjectCDC_VSS(name string) *DataObject {
-	cname := C.CString(name)
-	defer C.free(unsafe.Pointer(cname))
+	cname, freeCname := allocCString(name)
+	defer freeCname()
 	return &DataObject{
 		object: C.CDC_VSS_create(cname, (*C.ModelNode)(n.node), 0),
 	}
 }
 
 func (n *LogicalNode) CreateDataObjectCDC_SAV(name string, isInteger bool) *DataObject {
-	cname := C.CString(name)
-	defer C.free(unsafe.Pointer(cname))
+	cname, freeCname := allocCString(name)
+	defer freeCname()
 	return &DataObject{
 		object: C.CDC_SAV_create(cname, (*C.ModelNode)(n.node), 0, C.bool(isInteger)),
 	}
 }
 
 func (n *LogicalNode) CreateDataObjectCDC_APC(name string, ctlModel int) *DataObject {
-	cname := C.CString(name)
-	defer C.free(unsafe.Pointer(cname))
+	cname, freeCname := allocCString(name)
+	defer freeCname()
 	return &DataObject{
 		object: C.CDC_APC_create(cname, (*C.ModelNode)(n.node), 0, C.uint(ctlModel), C.bool(false)),
 	}
@@ -151,8 +151,8 @@ type DataAttribute struct {
 }
 
 func (do *DataObject) GetChild(name string) *DataAttribute {
-	cname := C.CString(name)
-	defer C.free(unsafe.Pointer(cname))
+	cname, freeCname := allocCString(name)
+	defer freeCname()
 	return &DataAttribute{
 		attribute: (*C.DataAttribute)(unsafe.Pointer(C.ModelNode_getChild((*C.ModelNode)(unsafe.Pointer(do.object)), cname))),
 	}
@@ -164,8 +164,8 @@ type DataSet struct {
 
 // CreateDataSet creates a new DataSet under this LogicalNode.
 func (ln *LogicalNode) CreateDataSet(name string) *DataSet {
-	cName := C.CString(name)
-	defer C.free(unsafe.Pointer(cName))
+	cName, freeCName := allocCString(name)
+	defer freeCName()
 
 	cDataSet := C.DataSet_create(cName, ln.node)
 	return &DataSet{dataSet: cDataSet}
@@ -173,8 +173,8 @@ func (ln *LogicalNode) CreateDataSet(name string) *DataSet {
 
 // AddDataSetEntry adds a new DataSetEntry to this DataSet.
 func (ds *DataSet) AddDataSetEntry(ref string) {
-	cRef := C.CString(ref)
-	defer C.free(unsafe.Pointer(cRef))
+	cRef, freeCRef := allocCString(ref)
+	defer freeCRef()
 
 	C.DataSetEntry_create(ds.dataSet, cRef, -1, nil)
 }

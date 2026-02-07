@@ -1,4 +1,4 @@
-//go:build linux && amd64
+//go:build linux && (amd64 || arm64 || arm)
 
 package iec61850
 
@@ -40,10 +40,8 @@ type (
 )
 
 func NewGooseSubscriber(conf SubscriberConf) (subscriber *GooseSubscriber) {
-	etherName := C.CString(conf.InterfaceID)
-	defer C.free(unsafe.Pointer(etherName))
-	goCbRef := C.CString(conf.Subscriber)
-	defer C.free(unsafe.Pointer(goCbRef))
+	goCbRef, freeGoCbRef := allocCString(conf.Subscriber)
+	defer freeGoCbRef()
 
 	cSubscriber := C.create_simple_goose_subscriber(goCbRef)
 	C.GooseSubscriber_setDstMac(cSubscriber, (*C.uint8_t)(unsafe.Pointer(&conf.DstMacAddr[0])))

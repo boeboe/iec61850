@@ -10,9 +10,13 @@ typedef struct {
 
 extern MmsDataAccessError writeAccessHandlerBridge(DataAttribute* dataAttribute, MmsValue* value, ClientConnection connection, void* parameter);
 
+extern MmsDataAccessError writeAccessHandlerForDataObjectBridge(DataAttribute* dataAttribute, MmsValue* value, ClientConnection connection, void* parameter);
+
 extern ControlHandlerResult controlHandlerBridge(ControlAction action, void* parameter, MmsValue* ctlVal, bool test);
 
 extern bool acseAuthenticatorBridge(void* parameter, AcseAuthenticationParameter authParameter, void** securityToken, IsoApplicationReference* appReference);
+
+extern void connectionIndicationBridge(IedServer self, ClientConnection connection, bool connected, void* parameter);
 
 static Buffer AcseAuthenticationParameter_GetBuffer(AcseAuthenticationParameter authParameter) {
     if (authParameter->mechanism == ACSE_AUTH_PASSWORD) {
@@ -31,6 +35,7 @@ import "C"
 
 import (
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"unsafe"
 )
@@ -39,6 +44,9 @@ var (
 	callbackIdGen        = atomic.Int32{}
 	writeAccessCallbacks = make(map[int32]*writeAccessCallback)
 	controlCallbacks     = make(map[int32]*controlCallback)
+
+	connectionIndicationHandlers   = make(map[uintptr]ConnectionIndicationHandler)
+	connectionIndicationHandlersMu sync.Mutex
 )
 
 type writeAccessCallback struct {
@@ -212,4 +220,93 @@ func (is *IedServer) SetAuthenticator(clientAuthenticator ClientAuthenticator) {
 	is.clientAuthenticator = clientAuthenticator
 	cPtr := unsafe.Pointer(is)
 	C.IedServer_setAuthenticator(is.server, (*[0]byte)(C.acseAuthenticatorBridge), cPtr)
+}
+
+//export connectionIndicationBridge
+func connectionIndicationBridge(self C.IedServer, connection C.ClientConnection, connected C.bool, parameter unsafe.Pointer) {
+	if parameter == nil {
+		return
+	}
+	key := uintptr(parameter)
+	connectionIndicationHandlersMu.Lock()
+	handler := connectionIndicationHandlers[key]
+	connectionIndicationHandlersMu.Unlock()
+	if handler == nil {
+		return
+	}
+	conn := &ClientConnection{c: connection}
+	handler(conn, bool(connected))
+}
+
+// SetConnectionIndicationHandler sets a callback invoked when a client connects or disconnects.
+func (is *IedServer) SetConnectionIndicationHandler(handler ConnectionIndicationHandler) {
+	is.connectionIndicationHandler = handler
+	key := uintptr(unsafe.Pointer(is.server))
+	connectionIndicationHandlersMu.Lock()
+	if handler != nil {
+		connectionIndicationHandlers[key] = handler
+	} else {
+		delete(connectionIndicationHandlers, key)
+	}
+	connectionIndicationHandlersMu.Unlock()
+	C.IedServer_setConnectionIndicationHandler(is.server, (*[0]byte)(C.connectionIndicationBridge), unsafe.Pointer(is.server))
+}
+
+// AccessPolicy is the default write access policy for an FC (allow or deny).
+type AccessPolicy int
+
+const (
+	AccessPolicyAllow AccessPolicy = 0
+	AccessPolicyDeny  AccessPolicy = 1
+)
+
+// SetWriteAccessPolicy sets the default write access policy for the given functional constraint.
+func (is *IedServer) SetWriteAccessPolicy(fc FC, policy AccessPolicy) {
+	C.IedServer_setWriteAccessPolicy(is.server, C.FunctionalConstraint(fc), C.AccessPolicy(policy))
+}
+
+// SetHandleWriteAccessForComplexAttribute installs a write access handler for a data attribute and all its sub-attributes (for complex attributes).
+func (is *IedServer) SetHandleWriteAccessForComplexAttribute(modelNode *ModelNode, handler WriteAccessHandler) {
+	if modelNode == nil {
+		return
+	}
+	callbackId := callbackIdGen.Add(1)
+	cPtr := intToPointerBug58625(callbackId)
+	writeAccessCallbacks[callbackId] = &writeAccessCallback{node: modelNode, handler: handler}
+	C.IedServer_handleWriteAccessForComplexAttribute(is.server, (*C.DataAttribute)(modelNode._modelNode), (*[0]byte)(C.writeAccessHandlerBridge), cPtr)
+}
+
+// WriteAccessHandlerForDataObject is called when a client writes to any data attribute of a data object with the given FC.
+type WriteAccessHandlerForDataObject func(dataObject *DataObject, dataAttribute *DataAttribute, value *MmsValue) MmsDataAccessError
+
+type dataObjectWriteAccessCallback struct {
+	dataObject *DataObject
+	handler    WriteAccessHandlerForDataObject
+}
+
+var dataObjectWriteAccessCallbacks = make(map[int32]*dataObjectWriteAccessCallback)
+
+//export writeAccessHandlerForDataObjectBridge
+func writeAccessHandlerForDataObjectBridge(dataAttribute *C.DataAttribute, value *C.MmsValue, connection C.ClientConnection, parameter unsafe.Pointer) C.MmsDataAccessError {
+	callbackId := int32(uintptr(parameter))
+	if call, ok := dataObjectWriteAccessCallbacks[callbackId]; ok {
+		mmsType := MmsType(C.MmsValue_getType(value))
+		if goValue, err := toGoValue(value, mmsType); err == nil {
+			da := &DataAttribute{attribute: dataAttribute}
+			err := call.handler(call.dataObject, da, &MmsValue{Type: mmsType, Value: goValue})
+			return C.MmsDataAccessError(err)
+		}
+	}
+	return C.DATA_ACCESS_ERROR_OBJECT_ACCESS_DENIED
+}
+
+// SetHandleWriteAccessForDataObject installs a write access handler for all data attributes of a data object with the given FC.
+func (is *IedServer) SetHandleWriteAccessForDataObject(dataObject *DataObject, fc FC, handler WriteAccessHandlerForDataObject) {
+	if dataObject == nil {
+		return
+	}
+	callbackId := callbackIdGen.Add(1)
+	cPtr := intToPointerBug58625(callbackId)
+	dataObjectWriteAccessCallbacks[callbackId] = &dataObjectWriteAccessCallback{dataObject: dataObject, handler: handler}
+	C.IedServer_handleWriteAccessForDataObject(is.server, dataObject.object, C.FunctionalConstraint(fc), (*[0]byte)(C.writeAccessHandlerForDataObjectBridge), cPtr)
 }

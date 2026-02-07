@@ -159,8 +159,8 @@ func (clientReport *ClientReport) GetMoreSeqmentsFollow() bool {
 func (c *Client) InstallReportHandler(objectReference string, function ReportCallbackFunction) error {
 	var clientError C.IedClientError
 
-	cObjectRef := C.CString(objectReference)
-	defer C.free(unsafe.Pointer(cObjectRef))
+	cObjectRef, freeCObjectRef := allocCString(objectReference)
+	defer freeCObjectRef()
 
 	rcb := C.IedConnection_getRCBValues(c.conn, &clientError, cObjectRef, nil)
 	if err := GetIedClientError(clientError); err != nil {
@@ -180,16 +180,16 @@ func (c *Client) InstallReportHandler(objectReference string, function ReportCal
 }
 
 func (c *Client) UninstallReportHandler(objectReference string) {
-	cObjectRef := C.CString(objectReference)
-	defer C.free(unsafe.Pointer(cObjectRef))
+	cObjectRef, freeCObjectRef := allocCString(objectReference)
+	defer freeCObjectRef()
 	C.IedConnection_uninstallReportHandler(c.conn, cObjectRef)
 }
 
 func (c *Client) TriggerGIReport(objectReference string) error {
 	var clientError C.IedClientError
 
-	cObjectRef := C.CString(objectReference)
-	defer C.free(unsafe.Pointer(cObjectRef))
+	cObjectRef, freeCObjectRef := allocCString(objectReference)
+	defer freeCObjectRef()
 
 	rcb := C.IedConnection_getRCBValues(c.conn, &clientError, cObjectRef, nil)
 	if err := GetIedClientError(clientError); err != nil {

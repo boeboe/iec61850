@@ -4,10 +4,6 @@ package iec61850
 // #include <iec61850_common.h>
 import "C"
 
-import (
-	"unsafe"
-)
-
 type TrgOps struct {
 	DataChange            bool // 值变化
 	QualityChange         bool // 品质变化
@@ -37,8 +33,8 @@ type ClientReportControlBlock struct {
 
 func (c *Client) GetRCBValues(objectReference string) (*ClientReportControlBlock, error) {
 	var clientError C.IedClientError
-	cObjectRef := C.CString(objectReference)
-	defer C.free(unsafe.Pointer(cObjectRef))
+	cObjectRef, freeCObjectRef := allocCString(objectReference)
+	defer freeCObjectRef()
 	rcb := C.IedConnection_getRCBValues(c.conn, &clientError, cObjectRef, nil)
 	if rcb == nil {
 		return nil, GetIedClientError(clientError)
@@ -97,8 +93,8 @@ func (c *Client) getTrgOps(rcb C.ClientReportControlBlock) TrgOps {
 
 func (c *Client) SetRCBValues(objectReference string, settings ClientReportControlBlock) error {
 	var clientError C.IedClientError
-	cObjectRef := C.CString(objectReference)
-	defer C.free(unsafe.Pointer(cObjectRef))
+	cObjectRef, freeCObjectRef := allocCString(objectReference)
+	defer freeCObjectRef()
 	rcb := C.ClientReportControlBlock_create(cObjectRef)
 	defer C.ClientReportControlBlock_destroy(rcb)
 	var trgOps, optFlds C.int

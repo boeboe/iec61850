@@ -11,6 +11,7 @@ import "C"
 import (
 	"sync"
 	"sync/atomic"
+	"time"
 	"unsafe"
 )
 
@@ -121,6 +122,36 @@ func NewClient(settings Settings) (*Client, error) {
 	return newClient(settings, nil)
 }
 
+// NewClientWithoutConnect creates a client and its underlying connection but does not connect.
+// Use ConnectAsync or ConnectWithAuth to connect later. Close() must be called when done if never connected.
+func NewClientWithoutConnect(settings Settings) (*Client, error) {
+	return newClientWithoutConnect(settings, nil)
+}
+
+// NewClientWithoutConnectWithTls is like NewClientWithoutConnect but with TLS configuration.
+func NewClientWithoutConnectWithTls(settings Settings, tlsConfig *TLSConfig) (*Client, error) {
+	return newClientWithoutConnect(settings, tlsConfig)
+}
+
+func newClientWithoutConnect(settings Settings, tlsConfig *TLSConfig) (*Client, error) {
+	c := &Client{connected: &atomic.Bool{}}
+	var conn C.IedConnection
+	if tlsConfig != nil {
+		_tlsConfig, err := tlsConfig.createCTlsConfig()
+		if err != nil {
+			return nil, err
+		}
+		c.tlsConfig = _tlsConfig
+		conn = C.IedConnection_createWithTlsSupport(_tlsConfig)
+	} else {
+		conn = C.IedConnection_create()
+	}
+	C.IedConnection_setConnectTimeout(conn, C.uint(settings.ConnectTimeout))
+	C.IedConnection_setRequestTimeout(conn, C.uint(settings.RequestTimeout))
+	c.conn = conn
+	return c, nil
+}
+
 func newClient(settings Settings, tlsConfig *TLSConfig) (*Client, error) {
 	client := &Client{}
 
@@ -150,17 +181,19 @@ func (c *Client) Write(objectRef string, fc FC, value interface{}) error {
 		return err
 	}
 
-	cObjectRef := C.CString(objectRef)
-	defer C.free(unsafe.Pointer(cObjectRef))
-	defer C.MmsValue_delete(mmsValue)
+	cObjectRef, freeCObjectRef := allocCString(objectRef)
+	defer freeCObjectRef()
+	if _, isRef := value.(*MmsValueRef); !isRef {
+		defer C.MmsValue_delete(mmsValue)
+	}
 	C.IedConnection_writeObject(c.conn, &clientError, cObjectRef, C.FunctionalConstraint(fc), mmsValue)
 	return GetIedClientError(clientError)
 }
 
 // ReadBool 读取bool类型值
 func (c *Client) ReadBool(objectRef string, fc FC) (bool, error) {
-	cObjectRef := C.CString(objectRef)
-	defer C.free(unsafe.Pointer(cObjectRef))
+	cObjectRef, freeCObjectRef := allocCString(objectRef)
+	defer freeCObjectRef()
 
 	var clientError C.IedClientError
 	value := C.IedConnection_readBooleanValue(c.conn, &clientError, cObjectRef, C.FunctionalConstraint(fc))
@@ -172,8 +205,8 @@ func (c *Client) ReadBool(objectRef string, fc FC) (bool, error) {
 
 // ReadInt32 读取int32类型值
 func (c *Client) ReadInt32(objectRef string, fc FC) (int32, error) {
-	cObjectRef := C.CString(objectRef)
-	defer C.free(unsafe.Pointer(cObjectRef))
+	cObjectRef, freeCObjectRef := allocCString(objectRef)
+	defer freeCObjectRef()
 
 	var clientError C.IedClientError
 	value := C.IedConnection_readInt32Value(c.conn, &clientError, cObjectRef, C.FunctionalConstraint(fc))
@@ -185,8 +218,8 @@ func (c *Client) ReadInt32(objectRef string, fc FC) (int32, error) {
 
 // ReadInt64 读取int64类型值
 func (c *Client) ReadInt64(objectRef string, fc FC) (int64, error) {
-	cObjectRef := C.CString(objectRef)
-	defer C.free(unsafe.Pointer(cObjectRef))
+	cObjectRef, freeCObjectRef := allocCString(objectRef)
+	defer freeCObjectRef()
 
 	var clientError C.IedClientError
 	value := C.IedConnection_readInt64Value(c.conn, &clientError, cObjectRef, C.FunctionalConstraint(fc))
@@ -198,8 +231,8 @@ func (c *Client) ReadInt64(objectRef string, fc FC) (int64, error) {
 
 // ReadUint32 读取uint32类型值
 func (c *Client) ReadUint32(objectRef string, fc FC) (uint32, error) {
-	cObjectRef := C.CString(objectRef)
-	defer C.free(unsafe.Pointer(cObjectRef))
+	cObjectRef, freeCObjectRef := allocCString(objectRef)
+	defer freeCObjectRef()
 
 	var clientError C.IedClientError
 	value := C.IedConnection_readUnsigned32Value(c.conn, &clientError, cObjectRef, C.FunctionalConstraint(fc))
@@ -247,8 +280,8 @@ func (c *Client) ReadUint16(objectRef string, fc FC) (uint16, error) {
 
 // ReadFloat 读取float类型值
 func (c *Client) ReadFloat(objectRef string, fc FC) (float32, error) {
-	cObjectRef := C.CString(objectRef)
-	defer C.free(unsafe.Pointer(cObjectRef))
+	cObjectRef, freeCObjectRef := allocCString(objectRef)
+	defer freeCObjectRef()
 
 	var clientError C.IedClientError
 	value := C.IedConnection_readFloatValue(c.conn, &clientError, cObjectRef, C.FunctionalConstraint(fc))
@@ -261,8 +294,8 @@ func (c *Client) ReadFloat(objectRef string, fc FC) (float32, error) {
 
 // ReadString 读取string类型值
 func (c *Client) ReadString(objectRef string, fc FC) (string, error) {
-	cObjectRef := C.CString(objectRef)
-	defer C.free(unsafe.Pointer(cObjectRef))
+	cObjectRef, freeCObjectRef := allocCString(objectRef)
+	defer freeCObjectRef()
 
 	var clientError C.IedClientError
 	value := C.IedConnection_readStringValue(c.conn, &clientError, cObjectRef, C.FunctionalConstraint(fc))
@@ -274,8 +307,8 @@ func (c *Client) ReadString(objectRef string, fc FC) (string, error) {
 
 // ReadTimestampValue reads a timestamp value with quality information
 func (c *Client) ReadTimestampValue(objectRef string, fc FC) (*Timestamp, error) {
-	cObjectRef := C.CString(objectRef)
-	defer C.free(unsafe.Pointer(cObjectRef))
+	cObjectRef, freeCObjectRef := allocCString(objectRef)
+	defer freeCObjectRef()
 
 	var clientError C.IedClientError
 	var cTimestamp C.Timestamp
@@ -296,8 +329,8 @@ func (c *Client) ReadTimestampValue(objectRef string, fc FC) (*Timestamp, error)
 
 // ReadQualityValue reads quality flags
 func (c *Client) ReadQualityValue(objectRef string, fc FC) (Quality, error) {
-	cObjectRef := C.CString(objectRef)
-	defer C.free(unsafe.Pointer(cObjectRef))
+	cObjectRef, freeCObjectRef := allocCString(objectRef)
+	defer freeCObjectRef()
 
 	var clientError C.IedClientError
 	value := C.IedConnection_readQualityValue(c.conn, &clientError, cObjectRef,
@@ -318,8 +351,8 @@ func (c *Client) ReadVisibleString(objectRef string, fc FC) (string, error) {
 
 // ReadOctetString reads an octet string (binary data) value
 func (c *Client) ReadOctetString(objectRef string, fc FC) ([]byte, error) {
-	cObjectRef := C.CString(objectRef)
-	defer C.free(unsafe.Pointer(cObjectRef))
+	cObjectRef, freeCObjectRef := allocCString(objectRef)
+	defer freeCObjectRef()
 
 	var clientError C.IedClientError
 	mmsValue := C.IedConnection_readObject(c.conn, &clientError, cObjectRef, C.FunctionalConstraint(fc))
@@ -339,8 +372,8 @@ func (c *Client) ReadOctetString(objectRef string, fc FC) ([]byte, error) {
 
 // ReadBitString reads a bit string value
 func (c *Client) ReadBitString(objectRef string, fc FC) ([]byte, error) {
-	cObjectRef := C.CString(objectRef)
-	defer C.free(unsafe.Pointer(cObjectRef))
+	cObjectRef, freeCObjectRef := allocCString(objectRef)
+	defer freeCObjectRef()
 
 	var clientError C.IedClientError
 	mmsValue := C.IedConnection_readObject(c.conn, &clientError, cObjectRef, C.FunctionalConstraint(fc))
@@ -376,8 +409,8 @@ func (c *Client) ReadBitString(objectRef string, fc FC) ([]byte, error) {
 // Read 读取属性数据
 func (c *Client) Read(objectRef string, fc FC) (interface{}, error) {
 	var clientError C.IedClientError
-	cObjectRef := C.CString(objectRef)
-	defer C.free(unsafe.Pointer(cObjectRef))
+	cObjectRef, freeCObjectRef := allocCString(objectRef)
+	defer freeCObjectRef()
 
 	mmsValue := C.IedConnection_readObject(c.conn, &clientError, cObjectRef, C.FunctionalConstraint(fc))
 	if err := GetIedClientError(clientError); err != nil {
@@ -391,8 +424,8 @@ func (c *Client) Read(objectRef string, fc FC) (interface{}, error) {
 
 // ReadDataSet 读取DataSet
 func (c *Client) ReadDataSet(objectRef string) ([]*MmsValue, error) {
-	cObjectRef := C.CString(objectRef)
-	defer C.free(unsafe.Pointer(cObjectRef))
+	cObjectRef, freeCObjectRef := allocCString(objectRef)
+	defer freeCObjectRef()
 
 	var clientError C.IedClientError
 	dataSet := C.IedConnection_readDataSetValues(c.conn, &clientError, cObjectRef, nil)
@@ -455,8 +488,8 @@ func (c *Client) GetRequestTimeout() uint32 {
 
 // GetServerFileDirectory retrieves the file directory from the server
 func (c *Client) GetServerFileDirectory(directoryName string) ([]string, error) {
-	cDirectoryName := C.CString(directoryName)
-	defer C.free(unsafe.Pointer(cDirectoryName))
+	cDirectoryName, freeCDirectoryName := allocCString(directoryName)
+	defer freeCDirectoryName()
 
 	var clientError C.IedClientError
 	linkedList := C.IedConnection_getFileDirectory(c.conn, &clientError, cDirectoryName)
@@ -488,13 +521,14 @@ type FileDirectoryEntry struct {
 
 // GetFileDirectoryEx retrieves detailed file directory information from the server
 func (c *Client) GetFileDirectoryEx(directoryName, continueAfter string) ([]FileDirectoryEntry, bool, error) {
-	cDirectoryName := C.CString(directoryName)
-	defer C.free(unsafe.Pointer(cDirectoryName))
+	cDirectoryName, freeCDirectoryName := allocCString(directoryName)
+	defer freeCDirectoryName()
 
 	var cContinueAfter *C.char
+	var freeCContinueAfter func()
 	if continueAfter != "" {
-		cContinueAfter = C.CString(continueAfter)
-		defer C.free(unsafe.Pointer(cContinueAfter))
+		cContinueAfter, freeCContinueAfter = allocCString(continueAfter)
+		defer freeCContinueAfter()
 	}
 
 	var clientError C.IedClientError
@@ -523,10 +557,28 @@ func (c *Client) GetFileDirectoryEx(directoryName, continueAfter string) ([]File
 	return result, bool(moreFollows), nil
 }
 
+// GetFileDirectoryExEntries returns the file directory as a slice of MmsFileDirectoryEntryEx (Filename, FileSize, LastModifiedTime, FileAttributes). FileAttributes may be 0 if the server does not provide them.
+func (c *Client) GetFileDirectoryExEntries(directoryName, continueAfter string) ([]MmsFileDirectoryEntryEx, bool, error) {
+	entries, more, err := c.GetFileDirectoryEx(directoryName, continueAfter)
+	if err != nil {
+		return nil, false, err
+	}
+	out := make([]MmsFileDirectoryEntryEx, len(entries))
+	for i := range entries {
+		out[i] = MmsFileDirectoryEntryEx{
+			Filename:         entries[i].FileName,
+			FileSize:         entries[i].FileSize,
+			LastModifiedTime: entries[i].LastModified,
+			FileAttributes:   0,
+		}
+	}
+	return out, more, nil
+}
+
 // GetFile retrieves a file from the server
 func (c *Client) GetFile(fileName string) ([]byte, error) {
-	cFileName := C.CString(fileName)
-	defer C.free(unsafe.Pointer(cFileName))
+	cFileName, freeCFileName := allocCString(fileName)
+	defer freeCFileName()
 
 	var clientError C.IedClientError
 	var fileData []byte
@@ -555,8 +607,8 @@ func (c *Client) GetFile(fileName string) ([]byte, error) {
 // GetVariableSpecType 获取类型规格
 func (c *Client) GetVariableSpecType(objectReference string, fc FC) (MmsType, error) {
 	var clientError C.IedClientError
-	cObjectRef := C.CString(objectReference)
-	defer C.free(unsafe.Pointer(cObjectRef))
+	cObjectRef, freeCObjectRef := allocCString(objectReference)
+	defer freeCObjectRef()
 
 	// 获取类型
 	spec := C.IedConnection_getVariableSpecification(c.conn, &clientError, cObjectRef, C.FunctionalConstraint(fc))
@@ -593,8 +645,8 @@ func (c *Client) GetVariableSpecType(objectReference string, fc FC) (MmsType, er
 }
 
 func (c *Client) getSubElementValue(sgcbVal *C.MmsValue, sgcbVarSpec *C.MmsVariableSpecification, name string) (interface{}, error) {
-	mmsPath := C.CString(name)
-	defer C.free(unsafe.Pointer(mmsPath))
+	mmsPath, freeMmsPath := allocCString(name)
+	defer freeMmsPath()
 	mmsValue := C.MmsValue_getSubElement(sgcbVal, sgcbVarSpec, mmsPath)
 	defer C.MmsValue_delete(mmsValue)
 	return toGoValue(mmsValue, MmsType(C.MmsValue_getType(mmsValue)))
@@ -618,9 +670,9 @@ func (c *Client) connect(settings Settings, tlsConfig *TLSConfig) error {
 
 	C.IedConnection_setConnectTimeout(conn, C.uint(settings.ConnectTimeout))
 	C.IedConnection_setRequestTimeout(conn, C.uint(settings.RequestTimeout))
-	host := C.CString(settings.Host)
+	host, freeHost := allocCString(settings.Host)
 	// 释放内存
-	defer C.free(unsafe.Pointer(host))
+	defer freeHost()
 
 	var clientError C.IedClientError
 	C.IedConnection_connect(conn, &clientError, host, C.int(settings.Port))
@@ -634,4 +686,76 @@ func (c *Client) connect(settings Settings, tlsConfig *TLSConfig) error {
 
 	c.conn = conn
 	return nil
+}
+
+// ConnectWithAuth connects to the server using ACSE password authentication.
+// The client must have been created with NewClientWithoutConnect or NewClientWithoutConnectWithTls.
+// Username is not used by the ACSE password mechanism; only password is sent.
+func (c *Client) ConnectWithAuth(hostname string, port int, username, password string) error {
+	if c.conn == nil {
+		return NotConnected
+	}
+	mmsConn := C.IedConnection_getMmsConnection(c.conn)
+	isoParams := C.MmsConnection_getIsoConnectionParameters(mmsConn)
+	authParam := C.AcseAuthenticationParameter_create()
+	// Library stores the pointer; do not destroy (IsoConnectionParameters owns it after set).
+	C.AcseAuthenticationParameter_setAuthMechanism(authParam, C.AcseAuthenticationMechanism(C.ACSE_AUTH_PASSWORD))
+	cPass, freeCPass := allocCString(password)
+	defer freeCPass()
+	C.AcseAuthenticationParameter_setPassword(authParam, cPass)
+	C.IsoConnectionParameters_setAcseAuthenticationParameter(isoParams, authParam)
+	host, freeHost := allocCString(hostname)
+	defer freeHost()
+	var clientError C.IedClientError
+	C.IedConnection_connect(c.conn, &clientError, host, C.int(port))
+	if err := GetIedClientError(clientError); err != nil {
+		return err
+	}
+	if c.connected != nil {
+		c.connected.Store(true)
+	} else {
+		c.connected = &atomic.Bool{}
+		c.connected.Store(true)
+	}
+	return nil
+}
+
+// ConnectAsync starts a non-blocking connection attempt. The callback is invoked when the connection
+// is established (with nil) or when it fails or is closed (with an error).
+// The client must have been created with NewClientWithoutConnect or NewClientWithoutConnectWithTls.
+func (c *Client) ConnectAsync(hostname string, port int, callback func(error)) {
+	if c.conn == nil || callback == nil {
+		if callback != nil {
+			callback(NotConnected)
+		}
+		return
+	}
+	host, freeHost := allocCString(hostname)
+	defer freeHost()
+	var clientError C.IedClientError
+	C.IedConnection_connectAsync(c.conn, &clientError, host, C.int(port))
+	if err := GetIedClientError(clientError); err != nil {
+		callback(err)
+		return
+	}
+	go func() {
+		for {
+			st := C.IedConnection_getState(c.conn)
+			if st == C.IED_STATE_CONNECTED {
+				if c.connected != nil {
+					c.connected.Store(true)
+				} else {
+					c.connected = &atomic.Bool{}
+					c.connected.Store(true)
+				}
+				callback(nil)
+				return
+			}
+			if st == C.IED_STATE_CLOSED {
+				callback(ConnectionLost)
+				return
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}()
 }

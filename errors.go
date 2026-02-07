@@ -1,6 +1,7 @@
 package iec61850
 
 // #include <iec61850_client.h>
+// #include <mms_client_connection.h>
 import "C"
 import "errors"
 
@@ -40,6 +41,56 @@ var (
 	ReadDataAccessError               = errors.New("data access error")
 	NullPointer                       = errors.New("null pointer returned from C function")
 )
+
+// GetMmsError maps a C MmsError to a Go error. Used by low-level MMS client APIs.
+func GetMmsError(err C.MmsError) error {
+	if err == C.MMS_ERROR_NONE {
+		return nil
+	}
+	// Map MmsError to existing IedClientError-style errors where possible
+	switch err {
+	case C.MMS_ERROR_CONNECTION_REJECTED:
+		return ConnectionRejected
+	case C.MMS_ERROR_CONNECTION_LOST:
+		return ConnectionLost
+	case C.MMS_ERROR_SERVICE_TIMEOUT:
+		return Timeout
+	case C.MMS_ERROR_INVALID_ARGUMENTS:
+		return UserProvidedInvalidArgument
+	case C.MMS_ERROR_OUTSTANDING_CALL_LIMIT:
+		return OutstandingCallLimitReached
+	case C.MMS_ERROR_ACCESS_OBJECT_ACCESS_DENIED:
+		return AccessDenied
+	case C.MMS_ERROR_ACCESS_OBJECT_NON_EXISTENT:
+		return ObjectDoesNotExist
+	case C.MMS_ERROR_DEFINITION_OBJECT_EXISTS:
+		return ObjectExists
+	case C.MMS_ERROR_ACCESS_OBJECT_ACCESS_UNSUPPORTED:
+		return ObjectAccessUnsupported
+	case C.MMS_ERROR_DEFINITION_TYPE_INCONSISTENT:
+		return TypeInconsistent
+	case C.MMS_ERROR_ACCESS_TEMPORARILY_UNAVAILABLE:
+		return TemporarilyUnavailable
+	case C.MMS_ERROR_DEFINITION_OBJECT_UNDEFINED:
+		return ObjectUndefined
+	case C.MMS_ERROR_DEFINITION_INVALID_ADDRESS:
+		return InvalidAddress
+	case C.MMS_ERROR_HARDWARE_FAULT:
+		return HardwareFault
+	case C.MMS_ERROR_DEFINITION_TYPE_UNSUPPORTED:
+		return TypeUnsupported
+	case C.MMS_ERROR_DEFINITION_OBJECT_ATTRIBUTE_INCONSISTENT:
+		return ObjectAttributeInconsistent
+	case C.MMS_ERROR_ACCESS_OBJECT_VALUE_INVALID:
+		return ObjectValueInvalid
+	case C.MMS_ERROR_ACCESS_OBJECT_INVALIDATED:
+		return ObjectInvalidated
+	case C.MMS_ERROR_PARSING_RESPONSE:
+		return MalformedMessage
+	default:
+		return Unknown
+	}
+}
 
 func GetIedClientError(err C.IedClientError) error {
 	cError := C.IedClientError(err)
