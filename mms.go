@@ -10,6 +10,12 @@ import (
 )
 
 func toMmsValue(mmsType MmsType, value interface{}) (*C.MmsValue, error) {
+	if ref, ok := value.(*MmsValueRef); ok {
+		if ref != nil && ref.c != nil {
+			return ref.c, nil
+		}
+		return nil, NullPointer
+	}
 	var (
 		mmsValue *C.MmsValue
 		err      error

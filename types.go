@@ -100,3 +100,61 @@ const (
 	// ACSE_AUTH_TLS Use TLS certificate for client authentication
 	ACSE_AUTH_TLS
 )
+
+// MmsVariableAccessAttribute describes variable access (read/write) for MMS variable attributes.
+type MmsVariableAccessAttribute int32
+
+const (
+	MmsVariableReadOnly   MmsVariableAccessAttribute = 0
+	MmsVariableWriteOnly  MmsVariableAccessAttribute = 1
+	MmsVariableReadWrite  MmsVariableAccessAttribute = 2
+	// Aliases with MMS_ prefix for compatibility.
+	MMS_VARIABLE_READ_ONLY  = MmsVariableReadOnly
+	MMS_VARIABLE_WRITE_ONLY = MmsVariableWriteOnly
+	MMS_VARIABLE_READ_WRITE = MmsVariableReadWrite
+)
+
+// MmsFileAccessAttribute describes file access permissions (bitmask).
+type MmsFileAccessAttribute int32
+
+const (
+	MmsFileRead   MmsFileAccessAttribute = 1
+	MmsFileWrite  MmsFileAccessAttribute = 2
+	MmsFileDelete MmsFileAccessAttribute = 4
+	// Aliases with MMS_ prefix for compatibility.
+	MMS_FILE_READ   = MmsFileRead
+	MMS_FILE_WRITE  = MmsFileWrite
+	MMS_FILE_DELETE = MmsFileDelete
+)
+
+// MmsJournalVariable identifies a journal variable type (tag or entry ID).
+type MmsJournalVariable int32
+
+const (
+	MmsJournalVariableTag     MmsJournalVariable = 0
+	MmsJournalVariableEntryID MmsJournalVariable = 1
+	// Aliases with MMS_ prefix for compatibility.
+	MMS_JOURNAL_VARIABLE_TAG     = MmsJournalVariableTag
+	MMS_JOURNAL_VARIABLE_ENTRY_ID = MmsJournalVariableEntryID
+)
+
+// MmsDeletableType indicates whether a named variable list (or similar) is deletable and by whom.
+type MmsDeletableType int32
+
+const (
+	MmsDeletableNone            MmsDeletableType = 0
+	MmsDeletableAASpecific      MmsDeletableType = 1
+	MmsDeletableDomainSpecific MmsDeletableType = 2
+	// Aliases with MMS_ prefix for compatibility.
+	MMS_DELETABLE_NONE             = MmsDeletableNone
+	MMS_DELETABLE_AA_SPECIFIC      = MmsDeletableAASpecific
+	MMS_DELETABLE_DOMAIN_SPECIFIC  = MmsDeletableDomainSpecific
+)
+
+// MmsJournalEntry holds a single journal entry (simplified form with numeric IDs and a single value).
+// For full journal entries with multiple variables use client_mms.JournalEntry from ReadJournalTimeRange/ReadJournalStartAfter.
+type MmsJournalEntry struct {
+	EntryID     uint64
+	OccurTime   uint64
+	EntryValues *MmsValue
+}

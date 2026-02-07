@@ -152,7 +152,9 @@ func (c *Client) Write(objectRef string, fc FC, value interface{}) error {
 
 	cObjectRef := C.CString(objectRef)
 	defer C.free(unsafe.Pointer(cObjectRef))
-	defer C.MmsValue_delete(mmsValue)
+	if _, isRef := value.(*MmsValueRef); !isRef {
+		defer C.MmsValue_delete(mmsValue)
+	}
 	C.IedConnection_writeObject(c.conn, &clientError, cObjectRef, C.FunctionalConstraint(fc), mmsValue)
 	return GetIedClientError(clientError)
 }
