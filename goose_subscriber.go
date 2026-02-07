@@ -1,4 +1,4 @@
-//go:build linux && amd64
+//go:build linux && (amd64 || arm64 || arm)
 
 package iec61850
 
@@ -40,8 +40,6 @@ type (
 )
 
 func NewGooseSubscriber(conf SubscriberConf) (subscriber *GooseSubscriber) {
-	etherName, freeEtherName := allocCString(conf.InterfaceID)
-	defer freeEtherName()
 	goCbRef, freeGoCbRef := allocCString(conf.Subscriber)
 	defer freeGoCbRef()
 
