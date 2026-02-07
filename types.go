@@ -60,6 +60,7 @@ const (
 	DATA_ACCESS_ERROR_OBJECT_NONE_EXISTENT          MmsDataAccessError = 10
 	DATA_ACCESS_ERROR_OBJECT_VALUE_INVALID          MmsDataAccessError = 11
 	DATA_ACCESS_ERROR_UNKNOWN                       MmsDataAccessError = 12
+	DATA_ACCESS_ERROR_TYPE_CONFLICT                 MmsDataAccessError = 13
 )
 
 type ControlHandlerResult int
@@ -112,19 +113,24 @@ const (
 	MMS_VARIABLE_READ_ONLY  = MmsVariableReadOnly
 	MMS_VARIABLE_WRITE_ONLY = MmsVariableWriteOnly
 	MMS_VARIABLE_READ_WRITE = MmsVariableReadWrite
+	MMS_ACCESS_READ_WRITE  = MmsVariableReadWrite
+	MMS_ACCESS_READ_ONLY   = MmsVariableReadOnly
+	MMS_ACCESS_WRITE_ONLY  = MmsVariableWriteOnly
 )
 
 // MmsFileAccessAttribute describes file access permissions (bitmask).
 type MmsFileAccessAttribute int32
 
 const (
-	MmsFileRead   MmsFileAccessAttribute = 1
-	MmsFileWrite  MmsFileAccessAttribute = 2
-	MmsFileDelete MmsFileAccessAttribute = 4
+	MmsFileAccessNone   MmsFileAccessAttribute = 0
+	MmsFileRead         MmsFileAccessAttribute = 1
+	MmsFileWrite        MmsFileAccessAttribute = 2
+	MmsFileDelete       MmsFileAccessAttribute = 4
 	// Aliases with MMS_ prefix for compatibility.
-	MMS_FILE_READ   = MmsFileRead
-	MMS_FILE_WRITE  = MmsFileWrite
-	MMS_FILE_DELETE = MmsFileDelete
+	MMS_FILE_ACCESS_NONE   = MmsFileAccessNone
+	MMS_FILE_READ         = MmsFileRead
+	MMS_FILE_WRITE        = MmsFileWrite
+	MMS_FILE_DELETE       = MmsFileDelete
 )
 
 // MmsJournalVariable identifies a journal variable type (tag or entry ID).
@@ -144,11 +150,47 @@ type MmsDeletableType int32
 const (
 	MmsDeletableNone            MmsDeletableType = 0
 	MmsDeletableAASpecific      MmsDeletableType = 1
-	MmsDeletableDomainSpecific MmsDeletableType = 2
+	MmsDeletableDomainSpecific  MmsDeletableType = 2
+	MmsDeletableVMDSpecific     MmsDeletableType = 3
 	// Aliases with MMS_ prefix for compatibility.
-	MMS_DELETABLE_NONE             = MmsDeletableNone
-	MMS_DELETABLE_AA_SPECIFIC      = MmsDeletableAASpecific
-	MMS_DELETABLE_DOMAIN_SPECIFIC  = MmsDeletableDomainSpecific
+	MMS_DELETABLE_NONE            = MmsDeletableNone
+	MMS_DELETABLE_AA_SPECIFIC     = MmsDeletableAASpecific
+	MMS_DELETABLE_DOMAIN_SPECIFIC = MmsDeletableDomainSpecific
+	MMS_DELETABLE_VMD_SPECIFIC    = MmsDeletableVMDSpecific
+)
+
+// MmsDeletable is an alias for MmsDeletableType for compatibility.
+type MmsDeletable = MmsDeletableType
+
+const (
+	MMS_DELETABLE_NOT    = MmsDeletableNone
+	MMS_DELETABLE_AA     = MmsDeletableAASpecific
+	MMS_DELETABLE_DOMAIN = MmsDeletableDomainSpecific
+	MMS_DELETABLE_VMD    = MmsDeletableVMDSpecific
+)
+
+// MmsNamedVariableListType indicates the scope of a named variable list.
+type MmsNamedVariableListType int32
+
+const (
+	NamedVariableListTypeVMDSpecific         MmsNamedVariableListType = 0
+	NamedVariableListTypeDomainSpecific      MmsNamedVariableListType = 1
+	NamedVariableListTypeAssociationSpecific MmsNamedVariableListType = 2
+	NAMED_VARIABLE_LIST_TYPE_VMD_SPECIFIC         = NamedVariableListTypeVMDSpecific
+	NAMED_VARIABLE_LIST_TYPE_DOMAIN_SPECIFIC      = NamedVariableListTypeDomainSpecific
+	NAMED_VARIABLE_LIST_TYPE_ASSOCIATION_SPECIFIC = NamedVariableListTypeAssociationSpecific
+)
+
+// MmsServerState represents the MMS server state.
+type MmsServerState int32
+
+const (
+	MmsServerStateIdle    MmsServerState = 0
+	MmsServerStateLoading MmsServerState = 1
+	MmsServerStateRunning MmsServerState = 2
+	MMS_SERVER_STATE_IDLE    = MmsServerStateIdle
+	MMS_SERVER_STATE_LOADING = MmsServerStateLoading
+	MMS_SERVER_STATE_RUNNING = MmsServerStateRunning
 )
 
 // MmsJournalEntry holds a single journal entry (simplified form with numeric IDs and a single value).
@@ -157,4 +199,37 @@ type MmsJournalEntry struct {
 	EntryID     uint64
 	OccurTime   uint64
 	EntryValues *MmsValue
+}
+
+// MmsConnectionParameters holds MMS layer connection parameters (max outstanding calls, PDU size, etc.).
+// Returned by Client.GetConnectionParameters after connection is established.
+type MmsConnectionParameters struct {
+	MaxServOutstandingCalling   int32
+	MaxServOutstandingCalled    int32
+	DataStructureNestingLevel   int32
+	MaxPduSize                  int32
+	ServicesSupported          [11]uint8
+}
+
+// MmsServerStatus holds the result of GetServerStatus (VMD logical/physical status).
+type MmsServerStatus struct {
+	VmdLogicalStatus  int32
+	VmdPhysicalStatus int32
+	LocalDetail       int32
+}
+
+// MmsVariableListAttributes holds attributes of a named variable list (deletable, variable names).
+type MmsVariableListAttributes struct {
+	IsDeletable   bool
+	DeletableType MmsDeletableType
+	NumberOfItems int32
+	VariableNames []string
+}
+
+// MmsFileDirectoryEntryEx holds extended file directory entry (name, size, last modified, attributes).
+type MmsFileDirectoryEntryEx struct {
+	Filename         string
+	FileSize         uint32
+	LastModifiedTime uint64
+	FileAttributes   uint32
 }

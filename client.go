@@ -11,6 +11,7 @@ import "C"
 import (
 	"sync"
 	"sync/atomic"
+	"time"
 	"unsafe"
 )
 
@@ -119,6 +120,36 @@ func NewClientWithDefaultSettings() (*Client, error) {
 // NewClient 创建客户端实例
 func NewClient(settings Settings) (*Client, error) {
 	return newClient(settings, nil)
+}
+
+// NewClientWithoutConnect creates a client and its underlying connection but does not connect.
+// Use ConnectAsync or ConnectWithAuth to connect later. Close() must be called when done if never connected.
+func NewClientWithoutConnect(settings Settings) (*Client, error) {
+	return newClientWithoutConnect(settings, nil)
+}
+
+// NewClientWithoutConnectWithTls is like NewClientWithoutConnect but with TLS configuration.
+func NewClientWithoutConnectWithTls(settings Settings, tlsConfig *TLSConfig) (*Client, error) {
+	return newClientWithoutConnect(settings, tlsConfig)
+}
+
+func newClientWithoutConnect(settings Settings, tlsConfig *TLSConfig) (*Client, error) {
+	c := &Client{connected: &atomic.Bool{}}
+	var conn C.IedConnection
+	if tlsConfig != nil {
+		_tlsConfig, err := tlsConfig.createCTlsConfig()
+		if err != nil {
+			return nil, err
+		}
+		c.tlsConfig = _tlsConfig
+		conn = C.IedConnection_createWithTlsSupport(_tlsConfig)
+	} else {
+		conn = C.IedConnection_create()
+	}
+	C.IedConnection_setConnectTimeout(conn, C.uint(settings.ConnectTimeout))
+	C.IedConnection_setRequestTimeout(conn, C.uint(settings.RequestTimeout))
+	c.conn = conn
+	return c, nil
 }
 
 func newClient(settings Settings, tlsConfig *TLSConfig) (*Client, error) {
@@ -525,6 +556,24 @@ func (c *Client) GetFileDirectoryEx(directoryName, continueAfter string) ([]File
 	return result, bool(moreFollows), nil
 }
 
+// GetFileDirectoryExEntries returns the file directory as a slice of MmsFileDirectoryEntryEx (Filename, FileSize, LastModifiedTime, FileAttributes). FileAttributes may be 0 if the server does not provide them.
+func (c *Client) GetFileDirectoryExEntries(directoryName, continueAfter string) ([]MmsFileDirectoryEntryEx, bool, error) {
+	entries, more, err := c.GetFileDirectoryEx(directoryName, continueAfter)
+	if err != nil {
+		return nil, false, err
+	}
+	out := make([]MmsFileDirectoryEntryEx, len(entries))
+	for i := range entries {
+		out[i] = MmsFileDirectoryEntryEx{
+			Filename:         entries[i].FileName,
+			FileSize:         entries[i].FileSize,
+			LastModifiedTime: entries[i].LastModified,
+			FileAttributes:   0,
+		}
+	}
+	return out, more, nil
+}
+
 // GetFile retrieves a file from the server
 func (c *Client) GetFile(fileName string) ([]byte, error) {
 	cFileName := C.CString(fileName)
@@ -636,4 +685,76 @@ func (c *Client) connect(settings Settings, tlsConfig *TLSConfig) error {
 
 	c.conn = conn
 	return nil
+}
+
+// ConnectWithAuth connects to the server using ACSE password authentication.
+// The client must have been created with NewClientWithoutConnect or NewClientWithoutConnectWithTls.
+// Username is not used by the ACSE password mechanism; only password is sent.
+func (c *Client) ConnectWithAuth(hostname string, port int, username, password string) error {
+	if c.conn == nil {
+		return NotConnected
+	}
+	mmsConn := C.IedConnection_getMmsConnection(c.conn)
+	isoParams := C.MmsConnection_getIsoConnectionParameters(mmsConn)
+	authParam := C.AcseAuthenticationParameter_create()
+	// Library stores the pointer; do not destroy (IsoConnectionParameters owns it after set).
+	C.AcseAuthenticationParameter_setAuthMechanism(authParam, C.AcseAuthenticationMechanism(C.ACSE_AUTH_PASSWORD))
+	cPass := C.CString(password)
+	defer C.free(unsafe.Pointer(cPass))
+	C.AcseAuthenticationParameter_setPassword(authParam, cPass)
+	C.IsoConnectionParameters_setAcseAuthenticationParameter(isoParams, authParam)
+	host := C.CString(hostname)
+	defer C.free(unsafe.Pointer(host))
+	var clientError C.IedClientError
+	C.IedConnection_connect(c.conn, &clientError, host, C.int(port))
+	if err := GetIedClientError(clientError); err != nil {
+		return err
+	}
+	if c.connected != nil {
+		c.connected.Store(true)
+	} else {
+		c.connected = &atomic.Bool{}
+		c.connected.Store(true)
+	}
+	return nil
+}
+
+// ConnectAsync starts a non-blocking connection attempt. The callback is invoked when the connection
+// is established (with nil) or when it fails or is closed (with an error).
+// The client must have been created with NewClientWithoutConnect or NewClientWithoutConnectWithTls.
+func (c *Client) ConnectAsync(hostname string, port int, callback func(error)) {
+	if c.conn == nil || callback == nil {
+		if callback != nil {
+			callback(NotConnected)
+		}
+		return
+	}
+	host := C.CString(hostname)
+	defer C.free(unsafe.Pointer(host))
+	var clientError C.IedClientError
+	C.IedConnection_connectAsync(c.conn, &clientError, host, C.int(port))
+	if err := GetIedClientError(clientError); err != nil {
+		callback(err)
+		return
+	}
+	go func() {
+		for {
+			st := C.IedConnection_getState(c.conn)
+			if st == C.IED_STATE_CONNECTED {
+				if c.connected != nil {
+					c.connected.Store(true)
+				} else {
+					c.connected = &atomic.Bool{}
+					c.connected.Store(true)
+				}
+				callback(nil)
+				return
+			}
+			if st == C.IED_STATE_CLOSED {
+				callback(ConnectionLost)
+				return
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}()
 }

@@ -110,6 +110,42 @@ func (r *MmsVariableSpecificationRef) IsValueOfType(v *MmsValueRef) bool {
 	return bool(C.MmsVariableSpecification_isValueOfType(r.c, v.c))
 }
 
+// GetChildValue returns the child of value corresponding to the relative MMS path childId (use "$" as separator). The ref must be for a structure; value must be the corresponding MmsValue. Caller does not own the returned value.
+func (r *MmsVariableSpecificationRef) GetChildValue(value *MmsValueRef, childId string) *MmsValueRef {
+	if r == nil || r.c == nil || value == nil || value.c == nil {
+		return nil
+	}
+	cChild := C.CString(childId)
+	defer C.free(unsafe.Pointer(cChild))
+	el := C.MmsVariableSpecification_getChildValue(r.c, value.c, cChild)
+	if el == nil {
+		return nil
+	}
+	return &MmsValueRef{c: el}
+}
+
+// GetNamedVariableRecursive returns the variable specification of the child specified by the relative MMS name nameId (use "$" as separator). Caller does not own the returned ref.
+func (r *MmsVariableSpecificationRef) GetNamedVariableRecursive(nameId string) *MmsVariableSpecificationRef {
+	if r == nil || r.c == nil {
+		return nil
+	}
+	cName := C.CString(nameId)
+	defer C.free(unsafe.Pointer(cName))
+	child := C.MmsVariableSpecification_getNamedVariableRecursive(r.c, cName)
+	if child == nil {
+		return nil
+	}
+	return &MmsVariableSpecificationRef{c: child}
+}
+
+// GetExponentWidth returns the exponent width for floating-point types; returns a meaningful value only for MMS_FLOAT/MMS_VISIBLE_STRING etc. as defined by the library.
+func (r *MmsVariableSpecificationRef) GetExponentWidth() int {
+	if r == nil || r.c == nil {
+		return 0
+	}
+	return int(C.MmsVariableSpecification_getExponentWidth(r.c))
+}
+
 // GetStructureElements returns a list of structure element names for MMS_STRUCTURE types. Caller must not free the returned strings (they are valid while the spec exists).
 func (r *MmsVariableSpecificationRef) GetStructureElements() []string {
 	if r == nil || r.c == nil {

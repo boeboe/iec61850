@@ -7,13 +7,15 @@ package iec61850
 #include <stdlib.h>
 */
 import "C"
-import (
-	"unsafe"
-)
+import "unsafe"
 
 // MmsValueRef wraps a C MmsValue pointer for use with MMS value constructors and accessors.
 // The caller is responsible for calling Free() when the value is no longer needed,
 // unless the value is passed to Client.Write (which does not take ownership).
+//
+// BitString integer conversions: use GetBitStringAsInteger, SetBitStringFromInteger,
+// GetBitStringAsIntegerBigEndian, SetBitStringFromIntegerBigEndian on *MmsValueRef
+// (the C-backed type). The high-level MmsValue type (Type + Value) does not hold a C pointer.
 type MmsValueRef struct {
 	c *C.MmsValue
 }
@@ -176,6 +178,14 @@ func MmsValueCreateArray(elementType *MmsVariableSpecificationRef, size int) *Mm
 		return nil
 	}
 	return &MmsValueRef{c: C.MmsValue_createArray(elementType.c, C.int(size))}
+}
+
+// MmsValueNewDefaultValue creates a new MmsValue with default value for the given type specification. Caller must call Free() when done.
+func MmsValueNewDefaultValue(typeSpec *MmsVariableSpecificationRef) *MmsValueRef {
+	if typeSpec == nil || typeSpec.c == nil {
+		return nil
+	}
+	return &MmsValueRef{c: C.MmsValue_newDefaultValue(typeSpec.c)}
 }
 
 // GetArraySize returns the number of elements in an array or structure. The value must be of type MMS_ARRAY or MMS_STRUCTURE.

@@ -41,6 +41,66 @@ func (c *Client) getMmsConnection() C.MmsConnection {
 	return C.IedConnection_getMmsConnection(c.conn)
 }
 
+// GetConnectionParameters returns the MMS connection parameters (max outstanding calls, PDU size, etc.).
+// The client must have an established connection (conn may be set; parameters are updated after connect).
+func (c *Client) GetConnectionParameters() (*MmsConnectionParameters, error) {
+	if c.conn == nil {
+		return nil, NotConnected
+	}
+	p := C.MmsConnection_getMmsConnectionParameters(c.getMmsConnection())
+	var sv [11]uint8
+	for i := 0; i < 11; i++ {
+		sv[i] = uint8(p.servicesSupported[i])
+	}
+	return &MmsConnectionParameters{
+		MaxServOutstandingCalling: int32(p.maxServOutstandingCalling),
+		MaxServOutstandingCalled:  int32(p.maxServOutstandingCalled),
+		DataStructureNestingLevel: int32(p.dataStructureNestingLevel),
+		MaxPduSize:                int32(p.maxPduSize),
+		ServicesSupported:        sv,
+	}, nil
+}
+
+// GetServerStatus returns the MMS server status (VMD logical and physical status).
+// extendedDerivation instructs the server to run self-diagnosis to determine status.
+func (c *Client) GetServerStatus(extendedDerivation bool) (*MmsServerStatus, error) {
+	var cError C.MmsError
+	var vmdLogical, vmdPhysical C.int
+	C.MmsConnection_getServerStatus(c.getMmsConnection(), &cError, &vmdLogical, &vmdPhysical, C.bool(extendedDerivation))
+	if err := GetMmsError(cError); err != nil {
+		return nil, err
+	}
+	return &MmsServerStatus{
+		VmdLogicalStatus:  int32(vmdLogical),
+		VmdPhysicalStatus: int32(vmdPhysical),
+		LocalDetail:       0,
+	}, nil
+}
+
+// ObtainFile sends an obtainFile request: the server will read the file from the client.
+// sourceFile is the local (client) path, destinationFile is the remote (server) path.
+// This is the same as uploading a file to the server (MMS obtainFile service).
+func (c *Client) ObtainFile(sourceFile, destinationFile string) error {
+	cSrc := C.CString(sourceFile)
+	defer C.free(unsafe.Pointer(cSrc))
+	cDst := C.CString(destinationFile)
+	defer C.free(unsafe.Pointer(cDst))
+	var cError C.MmsError
+	C.MmsConnection_obtainFile(c.getMmsConnection(), &cError, cSrc, cDst)
+	return GetMmsError(cError)
+}
+
+// RenameFile renames a file on the server (currentName -> newName).
+func (c *Client) RenameFile(currentName, newName string) error {
+	cCur := C.CString(currentName)
+	defer C.free(unsafe.Pointer(cCur))
+	cNew := C.CString(newName)
+	defer C.free(unsafe.Pointer(cNew))
+	var cError C.MmsError
+	C.MmsConnection_fileRename(c.getMmsConnection(), &cError, cCur, cNew)
+	return GetMmsError(cError)
+}
+
 // GetVariableAccessAttributes returns the MMS variable access attributes (type specification) for a named variable.
 // The caller must call Free() on the returned ref when done.
 func (c *Client) GetVariableAccessAttributes(domainID, itemID string) (*MmsVariableSpecificationRef, error) {
@@ -131,6 +191,66 @@ func linkedListToStrings(list C.LinkedList) []string {
 		}
 	}
 	return out
+}
+
+// WriteMultipleVariablesFromSpecs writes multiple variables in one request using variable access specs.
+// All items must be in the same domain (domainID). values must have the same length as items; each value is written to the variable specified by the corresponding VariableAccessSpec. Returns one MmsDataAccessError per variable.
+func (c *Client) WriteMultipleVariablesFromSpecs(domainID string, items []VariableAccessSpec, values []*MmsValueRef) ([]MmsDataAccessError, error) {
+	if len(items) != len(values) {
+		return nil, UserProvidedInvalidArgument
+	}
+	if len(items) == 0 {
+		return nil, nil
+	}
+	itemIDs := make([]string, len(items))
+	for i := range items {
+		itemIDs[i] = items[i].ItemID
+	}
+	return c.WriteMultipleVariables(domainID, itemIDs, values)
+}
+
+// WriteMultipleVariables writes multiple variables in one request. itemIDs and values must have the same length; each value is written to the variable named by the corresponding itemID in the given domain. Returns one MmsDataAccessError per variable.
+func (c *Client) WriteMultipleVariables(domainID string, itemIDs []string, values []*MmsValueRef) ([]MmsDataAccessError, error) {
+	if len(itemIDs) != len(values) {
+		return nil, UserProvidedInvalidArgument
+	}
+	if len(itemIDs) == 0 {
+		return nil, nil
+	}
+	cDomain := C.CString(domainID)
+	defer C.free(unsafe.Pointer(cDomain))
+	itemsList := C.LinkedList_create()
+	defer C.LinkedList_destroyDeep(itemsList, (C.LinkedListValueDeleteFunction)(C.free))
+	valuesList := C.LinkedList_create()
+	for _, id := range itemIDs {
+		cItem := C.CString(id)
+		C.LinkedList_add(itemsList, unsafe.Pointer(cItem))
+	}
+	for _, v := range values {
+		if v != nil && v.c != nil {
+			C.LinkedList_add(valuesList, unsafe.Pointer(v.c))
+		}
+	}
+	defer C.LinkedList_destroyStatic(valuesList)
+	var cError C.MmsError
+	var cResults C.LinkedList
+	C.MmsConnection_writeMultipleVariables(c.getMmsConnection(), &cError, cDomain, itemsList, valuesList, &cResults)
+	if err := GetMmsError(cError); err != nil {
+		return nil, err
+	}
+	if cResults == nil {
+		return nil, nil
+	}
+	defer C.destroyMmsValueLinkedList(cResults)
+	var results []MmsDataAccessError
+	for node := cResults; node != nil; node = C.LinkedList_getNext(node) {
+		data := C.LinkedList_getData(node)
+		if data != nil {
+			val := (*C.MmsValue)(data)
+			results = append(results, MmsDataAccessError(C.MmsValue_getDataAccessError(val)))
+		}
+	}
+	return results, nil
 }
 
 // ReadNamedVariableListValues reads all values from a domain or VMD scoped named variable list.
@@ -329,6 +449,11 @@ func (c *Client) DeleteAssociationSpecificNamedVariableList(listName string) (bo
 		return false, err
 	}
 	return bool(ok), nil
+}
+
+// SetNamedVariableListValues is an alias for WriteNamedVariableList: writes values to a domain or VMD scoped named variable list.
+func (c *Client) SetNamedVariableListValues(domainID, listName string, values []*MmsValueRef) ([]MmsDataAccessError, error) {
+	return c.WriteNamedVariableList(domainID, listName, values)
 }
 
 // WriteNamedVariableList writes values to a domain or VMD scoped named variable list.
