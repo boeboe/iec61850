@@ -123,6 +123,27 @@ func toGoValue(mmsValue *C.MmsValue, mmsType MmsType) (interface{}, error) {
 	return value, nil
 }
 
+// CMmsValueToMmsValue converts a C MmsValue to the high-level Go MmsValue.
+// The caller retains ownership of the C value (e.g. must call MmsValue_delete if the C layer transferred it).
+func CMmsValueToMmsValue(cVal *C.MmsValue) *MmsValue {
+	if cVal == nil {
+		return nil
+	}
+	mmsType := MmsType(C.MmsValue_getType(cVal))
+	if mmsType == Array || mmsType == Structure {
+		inner, err := toGoStructure(cVal, mmsType)
+		if err != nil {
+			return nil
+		}
+		return &MmsValue{Type: mmsType, Value: inner}
+	}
+	goVal, err := toGoValue(cVal, mmsType)
+	if err != nil {
+		return nil
+	}
+	return &MmsValue{Type: mmsType, Value: goVal}
+}
+
 func toGoStructure(mmsValue *C.MmsValue, mmsType MmsType) ([]*MmsValue, error) {
 	if !(mmsType == Structure || mmsType == Array) {
 		return nil, fmt.Errorf("require struct or array type value, but got type code is: %d", mmsType)

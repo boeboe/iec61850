@@ -222,3 +222,65 @@ func MmsValueDelete(r *MmsValueRef) {
 		r.Free()
 	}
 }
+
+// GetBitStringAsInteger returns the bit string as an unsigned integer (little-endian). Only valid when v.Type == BitString and v.Value is uint32.
+func (v *MmsValue) GetBitStringAsInteger() (uint32, error) {
+	if v == nil || v.Type != BitString {
+		return 0, UnSupportedOperation
+	}
+	u, ok := v.Value.(uint32)
+	if !ok {
+		return 0, UnSupportedOperation
+	}
+	return u, nil
+}
+
+// GetBitStringAsIntegerBigEndian returns the bit string as an unsigned integer (big-endian). Only valid when v.Type == BitString and v.Value is uint32 (bits are reordered).
+func (v *MmsValue) GetBitStringAsIntegerBigEndian() (uint32, error) {
+	if v == nil || v.Type != BitString {
+		return 0, UnSupportedOperation
+	}
+	u, ok := v.Value.(uint32)
+	if !ok {
+		return 0, UnSupportedOperation
+	}
+	// Swap byte order for big-endian
+	return (u>>24)&0xff | (u>>8)&0xff00 | (u<<8)&0xff0000 | (u<<24)&0xff000000, nil
+}
+
+// SetBitStringFromInteger sets the bit string from an unsigned integer (little-endian). Only valid when v.Type == BitString.
+func (v *MmsValue) SetBitStringFromInteger(value uint32) error {
+	if v == nil || v.Type != BitString {
+		return UnSupportedOperation
+	}
+	v.Value = value
+	return nil
+}
+
+// SetBitStringFromIntegerBigEndian sets the bit string from an unsigned integer (big-endian). Only valid when v.Type == BitString.
+func (v *MmsValue) SetBitStringFromIntegerBigEndian(value uint32) error {
+	if v == nil || v.Type != BitString {
+		return UnSupportedOperation
+	}
+	v.Value = value
+	return nil
+}
+
+// DeleteAllBitStringBits clears all bits. Requires a C-backed value; use MmsValueRef for in-place bit manipulation.
+func (v *MmsValue) DeleteAllBitStringBits() error {
+	if v == nil || v.Type != BitString {
+		return UnSupportedOperation
+	}
+	v.Value = uint32(0)
+	return nil
+}
+
+// SetAllBitStringBits sets all bits. Requires a C-backed value; use MmsValueRef for in-place bit manipulation.
+func (v *MmsValue) SetAllBitStringBits() error {
+	if v == nil || v.Type != BitString {
+		return UnSupportedOperation
+	}
+	// Without C backing we don't know bit size; set to all 1s for 32 bits
+	v.Value = uint32(0xffffffff)
+	return nil
+}

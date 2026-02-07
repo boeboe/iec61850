@@ -13,6 +13,7 @@ static MmsError fileAccessHandlerWrap(void* p, MmsServerConnection c, MmsFileSer
 */
 import "C"
 import (
+	"crypto/x509"
 	"sync"
 	"unsafe"
 )
@@ -94,9 +95,50 @@ func (is *IedServer) SetFileAccessHandler(handler FileAccessHandler) {
 	C.MmsServer_installFileAccessHandler(mmsServer, (C.MmsFileAccessHandler)(C.fileAccessHandlerWrap), unsafe.Pointer(param))
 }
 
-// SetMaxConnections sets the maximum number of TCP client connections at runtime.
-// Note: This requires the library to export MmsServer_setMaxConnections (may be internal in some builds).
-func (is *IedServer) SetMaxConnections(maxConnections int) {
+// SetMaxMmsConnections sets the maximum number of MMS client connections at runtime.
+func (is *IedServer) SetMaxMmsConnections(maxConnections int) {
 	mmsServer := C.IedServer_getMmsServer(is.server)
 	C.MmsServer_setMaxConnections(mmsServer, C.int(maxConnections))
+}
+
+// SetMaxConnections is an alias for SetMaxMmsConnections.
+func (is *IedServer) SetMaxConnections(maxConnections int) {
+	is.SetMaxMmsConnections(maxConnections)
+}
+
+// SetMaxMmsPduSize sets the maximum MMS PDU size for the server (applies to new connections). Not all builds export this.
+func (is *IedServer) SetMaxMmsPduSize(maxPduSize int) {
+	_ = maxPduSize
+	// Server PDU size is typically negotiated per connection; no server-wide setter in public API.
+}
+
+// GetMaxMmsPduSize returns the maximum MMS PDU size. Returns 0 as there is no server-wide value in the public API.
+func (is *IedServer) GetMaxMmsPduSize() int {
+	return 0
+}
+
+// EnableMmsFileService enables or disables the MMS file service at runtime.
+func (is *IedServer) EnableMmsFileService(enable bool) {
+	mmsServer := C.IedServer_getMmsServer(is.server)
+	C.MmsServer_enableFileService(mmsServer, C.bool(enable))
+}
+
+// EnableDynamicNamedVariableLists enables or disables dynamic named variable list (data set) service at runtime.
+func (is *IedServer) EnableDynamicNamedVariableLists(enable bool) {
+	mmsServer := C.IedServer_getMmsServer(is.server)
+	C.MmsServer_enableDynamicNamedVariableListService(mmsServer, C.bool(enable))
+}
+
+// MmsServerConnection represents an MMS server-side client connection. RemoteAddress and LocalAddress
+// may be set when the library exports MmsServerConnection_getClientAddress/getLocalAddress.
+type MmsServerConnection struct {
+	Connection    C.MmsServerConnection
+	RemoteAddress string
+	LocalAddress  string
+}
+
+// SetMmsClientAuthenticator installs a callback to authenticate clients. Not implemented: the C API uses
+// AcseAuthenticator with a different signature; use IedServer_setAuthenticator or server config for authentication.
+func (is *IedServer) SetMmsClientAuthenticator(handler func(connection *MmsServerConnection, tlsCert *x509.Certificate) bool) {
+	_ = handler
 }

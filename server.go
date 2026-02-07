@@ -149,3 +149,17 @@ func (is *IedServer) SetServerIdentity(vendor string, model string, version stri
 
 	C.IedServer_setServerIdentity(is.server, cVendor, cModel, cVersion)
 }
+
+// SetMmsLocalIpAddress sets the local IP address the MMS server will bind to. Call before Start.
+func (is *IedServer) SetMmsLocalIpAddress(localIpAddress string) error {
+	cAddr := C.CString(localIpAddress)
+	defer C.free(unsafe.Pointer(cAddr))
+	C.IedServer_setLocalIpAddress(is.server, cAddr)
+	return nil
+}
+
+// SetMmsTcpPort is not supported by the library; the TCP port is set when calling Start(port).
+func (is *IedServer) SetMmsTcpPort(tcpPort int) error {
+	_ = tcpPort
+	return UserProvidedInvalidArgument
+}

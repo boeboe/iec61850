@@ -193,12 +193,93 @@ const (
 	MMS_SERVER_STATE_RUNNING = MmsServerStateRunning
 )
 
-// MmsJournalEntry holds a single journal entry (simplified form with numeric IDs and a single value).
-// For full journal entries with multiple variables use client_mms.JournalEntry from ReadJournalTimeRange/ReadJournalStartAfter.
+// MmsVariableAccessSpec describes a variable reference in a named variable list (domain + item).
+type MmsVariableAccessSpec struct {
+	DomainID string
+	ItemID   string
+}
+
+// MmsNamedVariableListAttributes holds attributes of a named variable list (deletable, list type, variable specs).
+type MmsNamedVariableListAttributes struct {
+	IsDeletable   bool
+	DeletableType MmsDeletable
+	ListType      MmsNamedVariableListType
+	Variables     []MmsVariableAccessSpec
+}
+
+// MmsServerConnectionState represents the state of an MMS server connection.
+type MmsServerConnectionState int32
+
+const (
+	MmsServerConnectionStateIdle        MmsServerConnectionState = 0
+	MmsServerConnectionStateAssociation MmsServerConnectionState = 1
+	MmsServerConnectionStateConcluded   MmsServerConnectionState = 2
+	MMS_CON_STATE_IDLE                  = MmsServerConnectionStateIdle
+	MMS_CON_STATE_ASSOCIATION           = MmsServerConnectionStateAssociation
+	MMS_CON_STATE_CONCLUDED             = MmsServerConnectionStateConcluded
+)
+
+// MmsServiceSupportedBitmap is a bitmap of supported MMS services.
+type MmsServiceSupportedBitmap uint32
+
+const (
+	MmsServiceStatus                      MmsServiceSupportedBitmap = 0x0001
+	MmsServiceGetNameList                 MmsServiceSupportedBitmap = 0x0002
+	MmsServiceIdentify                    MmsServiceSupportedBitmap = 0x0004
+	MmsServiceRead                        MmsServiceSupportedBitmap = 0x0008
+	MmsServiceWrite                       MmsServiceSupportedBitmap = 0x0010
+	MmsServiceGetVariableAccess           MmsServiceSupportedBitmap = 0x0020
+	MmsServiceDefineNamedVariableList     MmsServiceSupportedBitmap = 0x0040
+	MmsServiceGetNamedVariableListAttrs    MmsServiceSupportedBitmap = 0x0080
+	MmsServiceDeleteNamedVariableList     MmsServiceSupportedBitmap = 0x0100
+	MmsServiceFileOpen                    MmsServiceSupportedBitmap = 0x0200
+	MmsServiceFileRead                    MmsServiceSupportedBitmap = 0x0400
+	MmsServiceFileClose                   MmsServiceSupportedBitmap = 0x0800
+	MmsServiceFileDelete                  MmsServiceSupportedBitmap = 0x1000
+	MmsServiceFileDirectory               MmsServiceSupportedBitmap = 0x2000
+	MmsServiceJournalRead                 MmsServiceSupportedBitmap = 0x4000
+	MMS_SERVICE_STATUS                   = MmsServiceStatus
+	MMS_SERVICE_GET_NAME_LIST            = MmsServiceGetNameList
+	MMS_SERVICE_IDENTIFY                 = MmsServiceIdentify
+	MMS_SERVICE_READ                     = MmsServiceRead
+	MMS_SERVICE_WRITE                    = MmsServiceWrite
+	MMS_SERVICE_GET_VARIABLE_ACCESS      = MmsServiceGetVariableAccess
+	MMS_SERVICE_DEFINE_NAMED_VARIABLE_LIST = MmsServiceDefineNamedVariableList
+	MMS_SERVICE_GET_NAMED_VARIABLE_LIST_ATTRIBUTES = MmsServiceGetNamedVariableListAttrs
+	MMS_SERVICE_DELETE_NAMED_VARIABLE_LIST = MmsServiceDeleteNamedVariableList
+	MMS_SERVICE_FILE_OPEN                = MmsServiceFileOpen
+	MMS_SERVICE_FILE_READ                = MmsServiceFileRead
+	MMS_SERVICE_FILE_CLOSE               = MmsServiceFileClose
+	MMS_SERVICE_FILE_DELETE              = MmsServiceFileDelete
+	MMS_SERVICE_FILE_DIRECTORY           = MmsServiceFileDirectory
+	MMS_SERVICE_JOURNAL_READ             = MmsServiceJournalRead
+)
+
+// IsoConnectionParameters holds ISO layer connection parameters (AP title, selectors).
+type IsoConnectionParameters struct {
+	LocalApTitle      []byte
+	LocalAeQualifier  int32
+	RemoteApTitle     []byte
+	RemoteAeQualifier int32
+	LocalTSelector   []byte
+	LocalSSelector    []byte
+	LocalPSelector    []byte
+	RemoteTSelector   []byte
+	RemoteSSelector   []byte
+	RemotePSelector   []byte
+}
+
+// MmsJournalEntry holds a single journal entry (entry ID bytes, occurrence time, content).
 type MmsJournalEntry struct {
-	EntryID     uint64
-	OccurTime   uint64
-	EntryValues *MmsValue
+	EntryID      []byte
+	OccurTime    uint64
+	EntryContent *MmsValue
+}
+
+// MmsJournalVariableSpec specifies a journal variable (tag and optional value spec).
+type MmsJournalVariableSpec struct {
+	Tag       string
+	ValueSpec *MmsVariableSpecificationRef
 }
 
 // MmsConnectionParameters holds MMS layer connection parameters (max outstanding calls, PDU size, etc.).
