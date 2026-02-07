@@ -624,6 +624,7 @@ func (c *Client) ReadJournalStartAfter(domainID, itemID string, timeSpecificatio
 	timeV := C.MmsValue_newBinaryTime(C.bool(false))
 	defer C.MmsValue_delete(timeV)
 	C.MmsValue_setBinaryTime(timeV, C.uint64_t(timeSpecificationMs))
+	// C library requires non-NULL entrySpecification (it calls MmsValue_getType on it).
 	var entryV *C.MmsValue
 	if len(entrySpecification) > 0 {
 		entryV = C.MmsValue_newOctetString(C.int(len(entrySpecification)), C.int(len(entrySpecification)))
@@ -631,6 +632,9 @@ func (c *Client) ReadJournalStartAfter(domainID, itemID string, timeSpecificatio
 		for i, b := range entrySpecification {
 			C.MmsValue_setOctetStringOctet(entryV, C.int(i), C.uint8_t(b))
 		}
+	} else {
+		entryV = C.MmsValue_newOctetString(0, 0)
+		defer C.MmsValue_delete(entryV)
 	}
 	var cMore C.bool
 	var cError C.MmsError
