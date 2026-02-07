@@ -17,6 +17,7 @@ extern void genericServiceAsyncBridge(uint32_t invokeId, void* parameter, MmsErr
 extern void readNVLDirectoryAsyncBridge(uint32_t invokeId, void* parameter, MmsError mmsError, LinkedList specs, _Bool deletable);
 extern void getVariableAccessAttributesAsyncBridge(uint32_t invokeId, void* parameter, MmsError mmsError, MmsVariableSpecification* spec);
 extern void identifyAsyncBridge(uint32_t invokeId, void* parameter, MmsError mmsError, char* vendorName, char* modelName, char* revision);
+extern void readJournalAsyncBridge(uint32_t invokeId, void* parameter, MmsError mmsError, LinkedList journalEntries, _Bool moreFollows);
 
 static void destroyMmsValueLinkedListLocal(LinkedList L) {
 	if (L) LinkedList_destroyDeep(L, (LinkedListValueDeleteFunction)MmsValue_delete);
@@ -607,6 +608,42 @@ type identifyAsyncCtx struct {
 	callback func(vendorName, modelName, revision string, err error)
 }
 
+type readJournalAsyncCtx struct {
+	callback func(entries []*MmsJournalEntry, moreFollows bool, err error)
+}
+
+//export readJournalAsyncBridge
+func readJournalAsyncBridge(invokeId C.uint32_t, parameter unsafe.Pointer, mmsError C.MmsError, journalEntries C.LinkedList, moreFollows C._Bool) {
+	_ = invokeId
+	if parameter == nil {
+		if journalEntries != nil {
+			C.destroyJournalEntryLinkedListLocal(journalEntries)
+		}
+		return
+	}
+	ctx := (*readJournalAsyncCtx)(parameter)
+	cb := ctx.callback
+	if cb == nil {
+		if journalEntries != nil {
+			C.destroyJournalEntryLinkedListLocal(journalEntries)
+		}
+		return
+	}
+	err := GetMmsError(mmsError)
+	var entries []*MmsJournalEntry
+	if err == nil && journalEntries != nil {
+		for node := journalEntries; node != nil; node = C.LinkedList_getNext(node) {
+			data := C.LinkedList_getData(node)
+			if data != nil {
+				e := convertCJournalEntryToMms(C.MmsJournalEntry(data))
+				entries = append(entries, &e)
+			}
+		}
+		C.destroyJournalEntryLinkedListLocal(journalEntries)
+	}
+	cb(entries, bool(moreFollows), err)
+}
+
 //export identifyAsyncBridge
 func identifyAsyncBridge(invokeId C.uint32_t, parameter unsafe.Pointer, mmsError C.MmsError, vendorName *C.char, modelName *C.char, revision *C.char) {
 	_ = invokeId
@@ -1046,6 +1083,21 @@ func (c *MmsConnection) GetNamedVariableListAttributes(domainID, listName string
 	return out, nil
 }
 
+// GetNamedVariableListAttributesAsync retrieves the attributes of a named variable list asynchronously.
+// Pass domainID as "" for VMD scope. The callback may run from another goroutine.
+func (c *MmsConnection) GetNamedVariableListAttributesAsync(domainID, listName string, callback func(*MmsNamedVariableListAttributes, error)) error {
+	return c.ReadNamedVariableListDirectoryAsync(domainID, listName, func(specs []MmsVariableAccessSpec, deletable bool, err error) {
+		if callback == nil {
+			return
+		}
+		if err != nil {
+			callback(nil, err)
+			return
+		}
+		callback(&MmsNamedVariableListAttributes{IsDeletable: deletable, Variables: specs}, nil)
+	})
+}
+
 // GetDomainVariableListNames returns the names of named variable lists in the given domain. Pass domainID as "" for VMD scope.
 func (c *MmsConnection) GetDomainVariableListNames(domainID string) ([]string, error) {
 	c.connMu.Lock()
@@ -1273,7 +1325,7 @@ func (c *MmsConnection) ReadJournal(domainID, journalName string, startingTime, 
 	if list == nil {
 		return nil, bool(cMore), nil
 	}
-	defer C.destroyJournalEntryLinkedListLocal(list)
+		defer C.destroyJournalEntryLinkedListLocal(list)
 	var entries []*MmsJournalEntry
 	for node := list; node != nil; node = C.LinkedList_getNext(node) {
 		data := C.LinkedList_getData(node)
@@ -1283,6 +1335,77 @@ func (c *MmsConnection) ReadJournal(domainID, journalName string, startingTime, 
 		}
 	}
 	return entries, bool(cMore), nil
+}
+
+// ReadJournalTimeRangeAsync reads journal entries in the given time range asynchronously (milliseconds since Unix epoch).
+// The callback may run from another goroutine.
+func (c *MmsConnection) ReadJournalTimeRangeAsync(domainID, journalName string, startTime, endTime uint64, callback func(entries []*MmsJournalEntry, moreFollows bool, err error)) error {
+	c.connMu.Lock()
+	if c.c == nil {
+		c.connMu.Unlock()
+		if callback != nil {
+			callback(nil, false, NotConnected)
+		}
+		return NotConnected
+	}
+	conn := c.c
+	c.connMu.Unlock()
+	if callback == nil {
+		return UserProvidedInvalidArgument
+	}
+	cDomain := C.CString(domainID)
+	defer C.free(unsafe.Pointer(cDomain))
+	cJournal := C.CString(journalName)
+	defer C.free(unsafe.Pointer(cJournal))
+	startV := C.MmsValue_newBinaryTime(C.bool(false))
+	defer C.MmsValue_delete(startV)
+	C.MmsValue_setBinaryTime(startV, C.uint64_t(startTime))
+	endV := C.MmsValue_newBinaryTime(C.bool(false))
+	defer C.MmsValue_delete(endV)
+	C.MmsValue_setBinaryTime(endV, C.uint64_t(endTime))
+	ctx := &readJournalAsyncCtx{callback: callback}
+	var cError C.MmsError
+	C.MmsConnection_readJournalTimeRangeAsync(conn, nil, &cError, cDomain, cJournal, startV, endV, (C.MmsConnection_ReadJournalHandler)(C.readJournalAsyncBridge), unsafe.Pointer(ctx))
+	return GetMmsError(cError)
+}
+
+// ReadJournalStartAfterAsync reads journal entries starting after the given time and entry specification asynchronously.
+// The callback may run from another goroutine.
+func (c *MmsConnection) ReadJournalStartAfterAsync(domainID, journalName string, entryID []byte, timeSpec *uint64, callback func(entries []*MmsJournalEntry, moreFollows bool, err error)) error {
+	c.connMu.Lock()
+	if c.c == nil {
+		c.connMu.Unlock()
+		if callback != nil {
+			callback(nil, false, NotConnected)
+		}
+		return NotConnected
+	}
+	conn := c.c
+	c.connMu.Unlock()
+	if callback == nil {
+		return UserProvidedInvalidArgument
+	}
+	cDomain := C.CString(domainID)
+	defer C.free(unsafe.Pointer(cDomain))
+	cJournal := C.CString(journalName)
+	defer C.free(unsafe.Pointer(cJournal))
+	timeV := C.MmsValue_newBinaryTime(C.bool(false))
+	defer C.MmsValue_delete(timeV)
+	if timeSpec != nil {
+		C.MmsValue_setBinaryTime(timeV, C.uint64_t(*timeSpec))
+	}
+	var entryV *C.MmsValue
+	if len(entryID) > 0 {
+		entryV = C.MmsValue_newOctetString(C.int(len(entryID)), C.int(len(entryID)))
+		defer C.MmsValue_delete(entryV)
+		for i, b := range entryID {
+			C.MmsValue_setOctetStringOctet(entryV, C.int(i), C.uint8_t(b))
+		}
+	}
+	ctx := &readJournalAsyncCtx{callback: callback}
+	var cError C.MmsError
+	C.MmsConnection_readJournalStartAfterAsync(conn, nil, &cError, cDomain, cJournal, timeV, entryV, (C.MmsConnection_ReadJournalHandler)(C.readJournalAsyncBridge), unsafe.Pointer(ctx))
+	return GetMmsError(cError)
 }
 
 // ReadJournalTimeRange reads journal entries in the given time range (milliseconds since Unix epoch).
