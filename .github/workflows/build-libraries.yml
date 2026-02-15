@@ -540,160 +540,142 @@ jobs:
           retention-days: 30
 
   build-windows-amd64:
-    name: Build Windows x64
+    name: Build Windows x64 (MinGW)
     runs-on: windows-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
 
-      - name: Setup MinGW
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup MinGW (MSYS2)
         uses: msys2/setup-msys2@v2
         with:
           msystem: MINGW64
           update: true
-          install: >-
-            git
+          install: >
             mingw-w64-x86_64-gcc
             mingw-w64-x86_64-cmake
-            mingw-w64-x86_64-ninja
-            make
+            mingw-w64-x86_64-make
+            mingw-w64-x86_64-binutils
 
-      - name: Install mbedtls from source
-        shell: msys2 {0}
+      - name: Setup PATH
+        shell: pwsh
         run: |
-          # Build mbedtls 2.28 from source with MinGW (compatible with Go CGo)
-          git clone --depth 1 --branch v2.28.8 https://github.com/Mbed-TLS/mbedtls.git /c/Temp/mbedtls
-          cd /c/Temp/mbedtls
-          mkdir build
-          cd build
-          cmake -G "Ninja" \
-                -DCMAKE_BUILD_TYPE=Release \
-                -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
-                -DCMAKE_C_COMPILER=gcc \
-                -DCMAKE_CXX_COMPILER=g++ \
-                -DCMAKE_C_FLAGS="-DMBEDTLS_PLATFORM_SNPRINTF_ALT -DMBEDTLS_PLATFORM_VSNPRINTF_ALT" \
-                -DENABLE_PROGRAMS=OFF \
-                -DENABLE_TESTING=OFF \
-                ..
-          ninja
-          echo "Built mbedtls libraries:"
-          ls -lh library/
+          $mingw = "C:\mingw64\bin"
+          echo "$mingw" | Out-File -FilePath $env:GITHUB_PATH -Append
+
+      - name: Build MbedTLS
+        shell: pwsh
+        run: |
+          git clone --depth 1 --branch v2.28.8 https://github.com/Mbed-TLS/mbedtls.git C:\mbedtls
+          cmake `
+            -S C:\mbedtls `
+            -B C:\mbedtls\build `
+            -G "MinGW Makefiles" `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DENABLE_PROGRAMS=OFF `
+            -DENABLE_TESTING=OFF
+          cmake --build C:\mbedtls\build
 
       - name: Clone libiec61850
-        shell: msys2 {0}
+        shell: pwsh
         run: |
-          git clone --depth 1 --branch ${{ env.LIBIEC61850_VERSION }} https://github.com/mz-automation/libiec61850.git /c/temp/libiec61850
+          git clone --depth 1 --branch $env:LIBIEC61850_VERSION https://github.com/mz-automation/libiec61850.git C:\libiec61850
 
-      - name: Enable advanced features
-        shell: msys2 {0}
+      - name: Install WinPcap developer pack (WpdPack) for L2 GOOSE/SMV
+        shell: pwsh
         run: |
-          cd /c/temp/libiec61850
-          sed -i 's/#define CONFIG_IEC61850_R_GOOSE 0/#define CONFIG_IEC61850_R_GOOSE 1/' config/stack_config.h
-          sed -i 's/#define CONFIG_IEC61850_R_SMV 0/#define CONFIG_IEC61850_R_SMV 1/' config/stack_config.h
-          sed -i 's/#define CONFIG_IEC61850_SNTP_CLIENT 0/#define CONFIG_IEC61850_SNTP_CLIENT 1/' config/stack_config.h
-          sed -i 's/#define CONFIG_MMS_SUPPORT_TLS 0/#define CONFIG_MMS_SUPPORT_TLS 1/' config/stack_config.h
+          $wpzip = "C:\WpdPack_4_1_2.zip"
+          $url = "https://www.winpcap.org/install/bin/WpdPack_4_1_2.zip"
+          Invoke-WebRequest -Uri $url -OutFile $wpzip -UseBasicParsing
+          Expand-Archive -Path $wpzip -DestinationPath "C:\wpd_extract" -Force
+          $wpd = Get-ChildItem "C:\wpd_extract" -Directory | Select-Object -First 1
+          if (-not $wpd) { $wpd = New-Item -ItemType Directory -Path "C:\wpd_extract\WpdPack"; Get-Item "C:\wpd_extract\WpdPack" }
+          $wpdPath = $wpd.FullName
+          $dest = "C:\libiec61850\third_party\winpcap"
+          New-Item -ItemType Directory -Path $dest -Force
+          Copy-Item -Path "$wpdPath\Include" -Destination "$dest\Include" -Recurse -Force -ErrorAction Stop
+          New-Item -ItemType Directory -Path "$dest\Lib" -Force
+          if (Test-Path "$wpdPath\Lib\x64") {
+            Copy-Item -Path "$wpdPath\Lib\x64\*" -Destination "$dest\Lib" -Force
+          } else {
+            Copy-Item -Path "$wpdPath\Lib\*" -Destination "$dest\Lib" -Force
+          }
+          if (-not (Test-Path "$dest\Lib\wpcap.lib")) { throw "wpcap.lib not found under $dest\Lib" }
+          Write-Host "WinPcap developer pack installed; L2 GOOSE/SMV will be enabled."
 
-      - name: Debug - Verify mbedtls libraries
-        shell: msys2 {0}
+      - name: Build libiec61850
+        shell: pwsh
         run: |
-          echo "=== mbedtls libraries ==="
-          ls -lh /c/Temp/mbedtls/build/library/
-          echo ""
-          echo "=== Checking library exists ==="
-          test -f /c/Temp/mbedtls/build/library/libmbedtls.a && echo "libmbedtls.a found" || echo "libmbedtls.a NOT found"
+          cmake `
+            -S C:\libiec61850 `
+            -B C:\libiec61850\build `
+            -G "MinGW Makefiles" `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCONFIG_IEC61850_L2_GOOSE=1 `
+            -DCONFIG_IEC61850_L2_SMV=1 `
+            -DCONFIG_IEC61850_R_GOOSE=1 `
+            -DCONFIG_IEC61850_R_SMV=1 `
+            -DCONFIG_IEC61850_SNTP_CLIENT=1 `
+            -DWITH_MBEDTLS=1 `
+            -DMBEDTLS_INCLUDE_DIR=C:\mbedtls\include `
+            -DMBEDTLS_LIBRARY=C:\mbedtls\build\library\libmbedtls.a `
+            -DMBEDX509_LIBRARY=C:\mbedtls\build\library\libmbedx509.a `
+            -DMBEDCRYPTO_LIBRARY=C:\mbedtls\build\library\libmbedcrypto.a `
+            -DBUILD_EXAMPLES=OFF
+          cmake --build C:\libiec61850\build --target iec61850
+          cmake --build C:\libiec61850\build --target hal
 
-      - name: Build library
-        shell: msys2 {0}
+      - name: Copy libraries
+        shell: pwsh
         run: |
-          cd /c/temp/libiec61850
-          mkdir build
-          cd build
-          cmake -G "Ninja" \
-                -DCMAKE_BUILD_TYPE=Release \
-                -DCMAKE_C_COMPILER=gcc \
-                -DCMAKE_CXX_COMPILER=g++ \
-                -DWITH_MBEDTLS=1 \
-                -DCONFIG_EXTERNAL_MBEDTLS_INCLUDE_PATH=/c/Temp/mbedtls/include \
-                -DMBEDTLS_INCLUDE_DIR=/c/Temp/mbedtls/include \
-                -DMBEDTLS_LIBRARY=/c/Temp/mbedtls/build/library/libmbedtls.a \
-                -DMBEDX509_LIBRARY=/c/Temp/mbedtls/build/library/libmbedx509.a \
-                -DMBEDCRYPTO_LIBRARY=/c/Temp/mbedtls/build/library/libmbedcrypto.a \
-                -DBUILD_EXAMPLES=OFF \
-                -DBUILD_PYTHON_BINDINGS=OFF \
-                ..
-          # Build only static libraries (hal and iec61850 targets), skip shared libraries
-          ninja hal
-          ninja iec61850
+          mkdir libiec61850\lib\win64 -Force
+          copy C:\libiec61850\build\src\libiec61850.a libiec61850\lib\win64\
+          copy C:\libiec61850\build\hal\libhal.a libiec61850\lib\win64\
+          copy C:\mbedtls\build\library\libmbedtls.a libiec61850\lib\win64\
+          copy C:\mbedtls\build\library\libmbedx509.a libiec61850\lib\win64\
+          copy C:\mbedtls\build\library\libmbedcrypto.a libiec61850\lib\win64\
+          copy C:\libiec61850\third_party\winpcap\Lib\wpcap.lib libiec61850\lib\win64\
+          copy C:\libiec61850\third_party\winpcap\Lib\packet.lib libiec61850\lib\win64\
+          dir libiec61850\lib\win64
 
-      - name: Copy library to workspace
-        shell: msys2 {0}
+      - name: Verify GOOSE/SV objects in library
+        shell: pwsh
         run: |
-          mkdir -p libiec61850/lib/win64
-          cp /c/temp/libiec61850/build/src/libiec61850.a libiec61850/lib/win64/
-          cp /c/temp/libiec61850/build/hal/libhal.a libiec61850/lib/win64/
-          cp /c/Temp/mbedtls/build/library/libmbedtls.a libiec61850/lib/win64/
-          cp /c/Temp/mbedtls/build/library/libmbedx509.a libiec61850/lib/win64/
-          cp /c/Temp/mbedtls/build/library/libmbedcrypto.a libiec61850/lib/win64/
-          echo "=== Copied libraries ==="
-          ls -lh libiec61850/lib/win64/
+          $env:Path = "C:\mingw64\bin;" + $env:Path
+          $arList = ar t libiec61850\lib\win64\libiec61850.a 2>&1 | Out-String
+          if ($arList -notmatch "goose_publisher") { Write-Error "goose_publisher object not found in libiec61850.a" }
+          if ($arList -notmatch "sv_publisher") { Write-Error "sv_publisher object not found in libiec61850.a" }
+          Write-Host "GOOSE/SV object files present in libiec61850.a"
 
-      - name: Verify library
-        shell: msys2 {0}
+      - name: Verify REQUIRED symbols exist (this is what matters)
+        shell: pwsh
         run: |
-          echo "=== Library verification ==="
-          ls -lh libiec61850/lib/win64/libiec61850.a
-          file libiec61850/lib/win64/libiec61850.a
-          echo ""
-          echo "=== Checking for TLS symbols ==="
-          nm libiec61850/lib/win64/libiec61850.a | grep -i TLSConfiguration | head -10 || echo "No TLS symbols found"
+          $env:Path = "C:\mingw64\bin;" + $env:Path
+          $lib = "libiec61850\lib\win64\libiec61850.a"
+          $nmOut = nm -g $lib 2>&1
+          $nm = $nmOut | Out-String
+          # Grep for mms/goose (case insensitive) to inspect what symbols are in the archive
+          $nmOut | Select-String -Pattern "(?i)mms|goose" -AllMatches | ForEach-Object { Write-Host $_.Line }
+          # With WpdPack installed, L2 GOOSE/SMV are enabled. Require full publisher symbols.
+          if ($nm -notmatch "GoosePublisher_createEx" -and $nm -notmatch "_GoosePublisher_createEx") { throw "Missing symbol GoosePublisher_createEx in $lib (L2 GOOSE not compiled in)" }
+          if ($nm -notmatch "SVPublisher_create" -and $nm -notmatch "_SVPublisher_create")          { throw "Missing symbol SVPublisher_create in $lib (L2 SMV not compiled in)" }
+          Write-Host "OK: L2 publisher symbols present."
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
+      - uses: actions/setup-go@v5
         with:
           go-version: '1.21'
 
-      - name: Debug - Check libraries and symbols
-        shell: msys2 {0}
-        run: |
-          echo "=== Library files ==="
-          ls -lh libiec61850/lib/win64/
-          echo ""
-          echo "=== Check config_win64.go LDFLAGS ==="
-          grep -A 10 'LDFLAGS' config_win64.go || echo "LDFLAGS not found"
-          echo ""
-          echo "=== Check snprintf symbols in libiec61850.a (looking for __imp__ imports) ==="
-          nm libiec61850/lib/win64/libiec61850.a | grep -i snprintf | head -20 || echo "No snprintf symbols"
-          echo ""
-          echo "=== Check vsnprintf symbols in libiec61850.a ==="
-          nm libiec61850/lib/win64/libiec61850.a | grep -i vsnprintf | head -20 || echo "No vsnprintf symbols"
-          echo ""
-          echo "=== Check snprintf in libmbedcrypto.a ==="
-          nm libiec61850/lib/win64/libmbedcrypto.a | grep -i snprintf | head -20 || echo "No snprintf symbols"
-          echo ""
-          echo "=== Extract and check one object file from libiec61850.a ==="
-          cd /tmp && ar x /c/temp/libiec61850/build/src/libiec61850.a mms_value.c.obj 2>/dev/null || true
-          if [ -f mms_value.c.obj ]; then
-            echo "Object file extracted, checking compile flags in debug info..."
-            strings mms_value.c.obj | grep -i "mingw\|ansi\|stdio" | head -10 || echo "No relevant strings found"
-          fi
-          echo ""
-          echo "=== CMake cache for TLS/MBEDTLS ==="
-          grep -i 'mbedtls\|tls' /c/temp/libiec61850/build/CMakeCache.txt || echo "No TLS entries in cache"
-          echo ""
-          echo "=== Check CMAKE_C_FLAGS in cache ==="
-          grep -i 'CMAKE_C_FLAGS' /c/temp/libiec61850/build/CMakeCache.txt || echo "No C_FLAGS found"
-
       - name: Test Go build
+        shell: pwsh
         env:
           CGO_ENABLED: 1
-          CC: D:/a/_temp/msys64/mingw64/bin/x86_64-w64-mingw32-gcc.exe
-          CXX: D:/a/_temp/msys64/mingw64/bin/x86_64-w64-mingw32-g++.exe
+          CC: x86_64-w64-mingw32-gcc
+          CXX: x86_64-w64-mingw32-g++
+          CGO_LDFLAGS_ALLOW: ^-Wl,--(whole|no-whole)-archive$
         run: |
-          echo "=== Forcing CGO to use MinGW toolchain ==="
-          go env | Select-String "CC|CXX|CGO"
-          echo ""
-          go build -v -ldflags "-extldflags=-static" ./...
-          echo "Go build successful for win64!"
+          where gcc
+          go env CC CXX
+          go build -x -v ./...
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

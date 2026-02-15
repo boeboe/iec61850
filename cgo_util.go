@@ -20,12 +20,7 @@ func Go2CStr(str string) *C.char {
 	return C.CString(gbstr)
 }
 
-func C2GoBool(i C.int) bool {
-	if i == 1 {
-		return true
-	}
-	return false
-}
+func C2GoBool(i C.int) bool { return i != 0 }
 
 func Go2CBool(b bool) C.int {
 	if b {

@@ -3,7 +3,9 @@
 **Analysis Date**: February 7, 2026  
 **Scope**: libiec61850 GOOSE C API vs iec61850 Go CGO bindings (functions, structs, enums, types).
 
-This document provides a gap analysis of GOOSE coverage and a plan to increase it. It complements [GAPS.md](GAPS.md) (MMS coverage). GOOSE bindings are build-tagged `linux && (amd64 || arm64 || arm)`.
+This document provides a gap analysis of GOOSE coverage and a plan to increase it. It complements [GAPS.md](GAPS.md) (MMS coverage).
+
+**Platform support:** GOOSE (and SV) bindings are built when the build tag matches: `(linux && (amd64 || arm64 || arm)) || (darwin && (amd64 || arm64)) || (windows && amd64)`. libiec61850 provides an Ethernet HAL for Linux (`hal/ethernet/linux`), Windows (`hal/ethernet/win32`, L2 GOOSE may need winpcap), and BSD/macOS (`hal/ethernet/bsd`). Prebuilt libs for darwin and windows must be built with GOOSE/Ethernet support (CONFIG_INCLUDE_GOOSE_SUPPORT and CONFIG_IEC61850_L2_GOOSE in CMake).
 
 ---
 

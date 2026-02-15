@@ -1,5 +1,3 @@
-//go:build linux && (amd64 || arm64 || arm)
-
 package goose_subscriber
 
 import (
