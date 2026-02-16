@@ -116,6 +116,28 @@ func (receiver *Timestamp) GetSubSecondPrecision() int {
 	return int(C.Timestamp_getSubsecondPrecision(&receiver.cTimestamp))
 }
 
+// SetSubsecondPrecision sets the number of significant bits of the fractionOfSecond part (IEC 61850 time quality bits 0-4).
+func (receiver *Timestamp) SetSubsecondPrecision(precision int) *Timestamp {
+	C.Timestamp_setSubsecondPrecision(&receiver.cTimestamp, C.int(precision))
+	return receiver
+}
+
+// SetTimeInMilliseconds sets the time from milliseconds since Unix epoch (1970-01-01 00:00:00 UTC).
+func (receiver *Timestamp) SetTimeInMilliseconds(epochMs int64) *Timestamp {
+	C.Timestamp_setTimeInMilliseconds(&receiver.cTimestamp, C.msSinceEpoch(epochMs))
+	return receiver
+}
+
+// SetTimeQuality sets the IEC 61850 time quality flags from a single byte:
+// bit 7 = leap seconds known, bit 6 = clock failure, bit 5 = clock not synchronized, bits 0-4 = subsecond precision.
+func (receiver *Timestamp) SetTimeQuality(timeQuality uint8) *Timestamp {
+	receiver.SetLeapSecondKnown((timeQuality & 0x80) != 0)
+	receiver.SetClockFailure((timeQuality & 0x40) != 0)
+	receiver.SetClockNotSynchronized((timeQuality & 0x20) != 0)
+	receiver.SetSubsecondPrecision(int(timeQuality & 0x1F))
+	return receiver
+}
+
 func (receiver *Timestamp) SetTime(time time.Time) *Timestamp {
 	C.Timestamp_setTimeInNanoseconds(&receiver.cTimestamp, C.nsSinceEpoch(time.UnixNano()))
 	return receiver

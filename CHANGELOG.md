@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.6] - 2026-02-15
+
+### Added
+
+- **Server – timestamp attributes**
+  - `UpdateTimestampAttributeValue(node *ModelNode, ts *Timestamp)` – update a UTC time (timestamp) DataAttribute with full Timestamp (time + time quality); use when both value and quality must be set (otherwise `UpdateUTCTimeAttributeValue(node, ms)` only sets the time value)
+- **Timestamp – building from epoch ms and quality byte**
+  - `SetTimeInMilliseconds(epochMs int64)` – set time from milliseconds since Unix epoch
+  - `SetTimeQuality(timeQuality uint8)` – set IEC 61850 time quality from one byte (bit 7 = leap seconds known, bit 6 = clock failure, bit 5 = clock not synchronized, bits 0–4 = subsecond precision)
+  - `SetSubsecondPrecision(precision int)` – set the number of significant bits of the fraction-of-second part (IEC 61850 time quality bits 0–4)
+
+---
+
 ## [1.1.3] - 2026-02-15
 
 ### Added

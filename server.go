@@ -180,6 +180,16 @@ func (is *IedServer) UpdateUTCTimeAttributeValue(node *ModelNode, value int64) {
 	C.IedServer_updateUTCTimeAttributeValue(is.server, (*C.DataAttribute)(node._modelNode), C.uint64_t(value))
 }
 
+// UpdateTimestampAttributeValue updates a UTC time (timestamp) DataAttribute with a full Timestamp
+// (time + time quality). Use this when both value and quality must be set; otherwise
+// UpdateUTCTimeAttributeValue(node, ms) only sets the time value.
+func (is *IedServer) UpdateTimestampAttributeValue(node *ModelNode, ts *Timestamp) {
+	if node == nil || node._modelNode == nil || ts == nil {
+		return
+	}
+	C.IedServer_updateTimestampAttributeValue(is.server, (*C.DataAttribute)(node._modelNode), &ts.cTimestamp)
+}
+
 // UpdateFloatAttributeValue updates a DataAttribute with a float value.
 func (is *IedServer) UpdateFloatAttributeValue(node *ModelNode, value float32) {
 	if node == nil || node._modelNode == nil {
