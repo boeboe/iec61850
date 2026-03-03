@@ -147,7 +147,7 @@ func acseAuthenticatorBridge(parameter unsafe.Pointer, authParameter C.AcseAuthe
 	is := (*IedServer)(parameter)
 
 	oid := appReference.apTitle
-	// 将 oid->arc 转换为 Go 的切片
+	// Convert oid->arc to Go slice
 	arcValues := make([]uint16, int(oid.arcCount))
 	for i := 0; i < int(oid.arcCount); i++ {
 		arcValues[i] = uint16(oid.arc[i])
@@ -163,7 +163,7 @@ func acseAuthenticatorBridge(parameter unsafe.Pointer, authParameter C.AcseAuthe
 		Mechanism: mechanism,
 	}
 
-	// 将 uint8_t* 转换为 Go 的 []byte
+	// Convert uint8_t* to Go []byte
 	buffer := C.AcseAuthenticationParameter_GetBuffer(authParameter)
 	switch mechanism {
 	case ACSE_AUTH_PASSWORD:
@@ -184,7 +184,7 @@ func (is *IedServer) SetHandleWriteAccess(modelNode *ModelNode, handler WriteAcc
 	}
 
 	callbackId := callbackIdGen.Add(1)
-	// 将 int 转为 uintptr，再转为 unsafe.Pointer
+	// Convert int to uintptr, then to unsafe.Pointer
 	cPtr := intToPointerBug58625(callbackId)
 	writeAccessCallbacks[callbackId] = &writeAccessCallback{
 		node:    modelNode,
@@ -200,7 +200,7 @@ func (is *IedServer) SetControlHandler(modelNode *ModelNode, handler ControlHand
 	}
 
 	callbackId := callbackIdGen.Add(1)
-	// 将 int 转为 uintptr，再转为 unsafe.Pointer
+	// Convert int to uintptr, then to unsafe.Pointer
 	cPtr := intToPointerBug58625(callbackId)
 	controlCallbacks[callbackId] = &controlCallback{
 		node:    modelNode,

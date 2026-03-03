@@ -6,18 +6,16 @@ package iec61850
 import "C"
 import (
 	"unsafe"
-
-	sc "golang.org/x/text/encoding/simplifiedchinese"
 )
 
+// C2GoStr converts a C string to a Go string (UTF-8).
 func C2GoStr(str *C.char) string {
-	utf8str, _ := sc.GB18030.NewDecoder().String(C.GoString(str))
-	return utf8str
+	return C.GoString(str)
 }
 
+// Go2CStr converts a Go string (UTF-8) to a C string; caller must not free the result when using allocGo2CStr.
 func Go2CStr(str string) *C.char {
-	gbstr, _ := sc.GB18030.NewEncoder().String(str)
-	return C.CString(gbstr)
+	return C.CString(str)
 }
 
 func C2GoBool(i C.int) bool { return i != 0 }
@@ -47,11 +45,8 @@ func allocCMalloc(size C.size_t) (unsafe.Pointer, func()) {
 	}
 }
 
-// allocGo2CStr allocates a C string with GB18030 encoding and returns a cleanup function
+// allocGo2CStr allocates a C string (UTF-8) and returns a cleanup function.
 // Usage: cStr, free := allocGo2CStr("hello"); defer free()
 func allocGo2CStr(s string) (*C.char, func()) {
-	cStr := Go2CStr(s)
-	return cStr, func() {
-		C.free(unsafe.Pointer(cStr))
-	}
+	return allocCString(s)
 }

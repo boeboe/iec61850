@@ -63,7 +63,7 @@ func NewControlObjectParamINC(ctlVal int) *ControlObjectParamINC {
 	}
 }
 
-// ControlForDirectWithNormalSecurity 控制模式 1[direct-with-normal-security]
+// ControlForDirectWithNormalSecurity control mode 1: direct-with-normal-security
 func (c *Client) ControlForDirectWithNormalSecurity(objectRef string, ctlVal bool) error {
 	return c.ControlByControlModel(objectRef, CONTROL_MODEL_DIRECT_NORMAL, NewControlObjectParam(ctlVal))
 }
@@ -205,17 +205,17 @@ func (c *Client) ControlByControlModel(objectRef string, controlModel ControlMod
 	return nil
 }
 
-// ControlForSboWithNormalSecurity 控制模式 2[sbo-with-normal-security]
+// ControlForSboWithNormalSecurity control mode 2: sbo-with-normal-security
 func (c *Client) ControlForSboWithNormalSecurity(objectRef string, value bool) error {
 	return c.ControlByControlModel(objectRef, CONTROL_MODEL_SBO_NORMAL, NewControlObjectParam(value))
 }
 
-// ControlForDirectWithEnhancedSecurity 控制模式 3[direct-with-enhanced-security]
+// ControlForDirectWithEnhancedSecurity control mode 3: direct-with-enhanced-security
 func (c *Client) ControlForDirectWithEnhancedSecurity(objectRef string, value bool) error {
 	return c.ControlByControlModel(objectRef, CONTROL_MODEL_DIRECT_ENHANCED, NewControlObjectParam(value))
 }
 
-// ControlForSboWithEnhancedSecurity 控制模式 4[sbo-with-enhanced-security]
+// ControlForSboWithEnhancedSecurity control mode 4: sbo-with-enhanced-security
 func (c *Client) ControlForSboWithEnhancedSecurity(objectRef string, value bool) error {
 	return c.ControlByControlModel(objectRef, CONTROL_MODEL_SBO_ENHANCED, NewControlObjectParam(value))
 }

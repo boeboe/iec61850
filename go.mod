@@ -5,7 +5,6 @@ go 1.19
 require (
 	github.com/spf13/cast v1.6.0
 	github.com/spf13/cobra v1.8.1
-	golang.org/x/text v0.16.0
 	gopkg.in/validator.v2 v2.0.1
 )
 

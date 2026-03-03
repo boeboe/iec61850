@@ -16,7 +16,7 @@ on:
 
 jobs:
   static-analysis:
-    # 定义矩阵的值，指定不同的平台
+    # Define matrix values for different platforms
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]

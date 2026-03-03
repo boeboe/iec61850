@@ -1,96 +1,59 @@
-# iec61850
+# iec61850 — IEC 61850 MMS, GOOSE and SV Go binding
 
-[![License](https://img.shields.io/badge/license-GPL--3.0-green.svg)](https://www.gnu.org/licenses/gpl-3.0.html)
-[![PkgGoDev](https://pkg.go.dev/badge/mod/github.com/boeboe/iec61850)](https://pkg.go.dev/mod/github.com/boeboe/iec61850)
-![Go Version](https://img.shields.io/badge/go%20version-%3E=1.0-61CFDD.svg?style=flat-square)
-[![Go Report Card](https://goreportcard.com/badge/github.com/boeboe/iec61850?style=flat-square)](https://goreportcard.com/report/github.com/boeboe/iec61850)
+[![Go](https://img.shields.io/badge/Go-1.19+-00ADD8?style=flat&logo=go)](https://go.dev/)
+[![License](https://img.shields.io/badge/License-GPL--3.0-green.svg)](https://www.gnu.org/licenses/gpl-3.0.html)
+[![PkgGoDev](https://pkg.go.dev/badge/github.com/boeboe/iec61850)](https://pkg.go.dev/github.com/boeboe/iec61850)
+[![Go Report Card](https://goreportcard.com/badge/github.com/boeboe/iec61850)](https://goreportcard.com/report/github.com/boeboe/iec61850)
 
-English | [中文](README_zh_CN.md)
+Go (cgo) bindings for [libIEC61850](https://github.com/mz-automation/libiec61850) — MMS, GOOSE, and Sampled Values (SV) client/server.
 
-cgo version of IEC 61850 library, reference [libiec61850](https://github.com/mz-automation/libiec61850)
+## Quick start
 
-## Version Requirements
-
-**This project requires libiec61850 v1.6.1** with the following features enabled:
-- ✅ R-GOOSE (Routable GOOSE over UDP/IP)
-- ✅ R-SMV (Routable Sampled Values over UDP/IP)
-- ✅ SNTP Client (Network time synchronization)
-
-See [COMPATIBILITY.md](COMPATIBILITY.md) for feature coverage and build instructions.
-
-## Overview
-
-iec61850 is an open source (GPL-3.0 license) implementation of the IEC 61850 client and server library that implements the MMS, GOOSE and SV protocols.
-It can be used to implement IEC 61850 compliant clients and PCs on embedded systems and PCs running Linux, Windows Server application.
-This project relies on and refers to [libiec61850](https://github.com/mz-automation/libiec61850).
-
-## Features
-
-The library support the following IEC 61850 protocol features:
-
-- MMS client/server, GOOSE (IEC 61850-8-1)
-- Sampled Values (SV - IEC 61850-9-2)
-- Support for buffered and unbuffered reports
-- Online report control block configuration
-- GOOSE control block client operations (read/write GoCB configuration)
-- Data access service (get data, set data)
-- Online data model discovery and browsing
-- All data set services (get values, set values, browse)
-- Dynamic data set services (create and delete)
-- Log service
-- MMS file services (browse, get file, set file, delete/rename file)
-- Setting group handling
-- Support for service tracking
-- GOOSE and SV control block handling
-- TLS support
-
-## How to use
-
-```shell
+```bash
 go get -u github.com/boeboe/iec61850
 ```
 
-- [Client control operations](test/client_control/client_control_test.go)
-- [Client rcb operations](test/client_rcb/client_rcb_test.go)
-- [Client read and write](test/client_rw)
-- [Client setting groups](test/client_sg/client_sg_test.go)
-- [Create tls client](test/tls_client/client_read_test.go)
-- [Server handle write access](test/server/complexModel_test.go)
-- [Server handle control](test/server/simpleIO_control_test.go)
-- [Server handle direct control](test/server/simpleIO_direct_control_goose_test.go)
-- [Create tls server](test/tls_server/tls_server_test.go)
+**Requires:** libiec61850 v1.6.1 built with R-GOOSE, R-SMV, and SNTP support. See [Building libiec61850](#building-libiec61850-v161) below.
+
+## Documentation
+
+Detailed developer documentation:
+
+| Document | Description |
+|----------|-------------|
+| [FUNCTIONS.md](FUNCTIONS.md) | API reference for all exported functions (C↔Go mapping, parameters, examples) |
+| [STRUCTS.md](STRUCTS.md) | Struct and type reference (Client, Server, MMS, GOOSE, SV, configuration, timestamps) |
+| [ENUMS.md](ENUMS.md) | Enums and constants (MmsType, FC, quality flags, control models, etc.) |
+
+## Features
+
+- **MMS** client/server, data access (read/write), discovery, data sets, reports, file services, setting groups
+- **GOOSE** (IEC 61850-8-1): publish/subscribe, control blocks (GoCB), R-GOOSE
+- **Sampled Values (SV)** (IEC 61850-9-2): publish/subscribe, R-SMV
+- **Server:** data model, attribute updates (including timestamp + time quality), write/control handlers, TLS
+- **Client:** connect (sync/async, with auth), read/write, timestamps with quality (`UtcTimeValue`), reports, TLS
+
+## Example usage
+
+- [Client control](test/client_control/client_control_test.go) · [Client RCB](test/client_rcb/client_rcb_test.go) · [Client read/write](test/client_rw) · [Client setting groups](test/client_sg/client_sg_test.go)
+- [TLS client](test/tls_client/client_read_test.go) · [TLS server](test/tls_server/tls_server_test.go)
+- [Server write access](test/server/complexModel_test.go) · [Server control](test/server/simpleIO_control_test.go) · [Server direct control + GOOSE](test/server/simpleIO_direct_control_goose_test.go)
 
 ## Building libiec61850 v1.6.1
 
-Before using this library, you must build libiec61850 v1.6.1 with advanced features enabled:
+Build the C library with R-GOOSE, R-SMV, and SNTP before using this package.
 
-### Prerequisites
-- mbedtls (required for R-GOOSE and R-SMV):
-  ```bash
-  # macOS
-  brew install mbedtls
-  
-  # Ubuntu/Debian
-  sudo apt-get install libmbedtls-dev
-  ```
+**Prerequisites:** mbedtls (e.g. `brew install mbedtls` on macOS, `apt-get install libmbedtls-dev` on Debian/Ubuntu).
 
-### Build Libraries
 ```bash
-# Automated build script
 ./scripts/rebuild_libraries.sh
-```
-
-### Verify Installation
-```bash
-go test -v -run TestLibraryVersion
-# Expected: Using libiec61850 version: 1.6.1 (with R-GOOSE, R-SMV, SNTP enabled)
+go test -v -run TestLibraryVersion   # verify build
 ```
 
 
 ## License
 
-iec61850 is based on the [GPL-3.0 license](./LICENSE) agreement, and iec61850 relies on some third-party components whose open source agreement is GPL-3.0 and MIT.
+**This project is licensed under the GNU General Public License v3.0 (GPL-3.0).**
 
-## Contact
+This is required because the Go binding links against **[libIEC61850](https://github.com/mz-automation/libiec61850)** (the official open-source C library for IEC 61850 protocols by MZ Automation), which is distributed under [GPL-3.0](https://www.gnu.org/licenses/gpl-3.0.html). Any use or distribution of this binding is therefore subject to the same GPL-3.0 terms. See [LICENSE](./LICENSE) in this repository for the full license text.
 
-- Email：<wendy512@yeah.net>

@@ -21,7 +21,7 @@ type SettingGroup struct {
 	CnfEdit bool
 }
 
-// WriteSG 写入SettingGroup
+// WriteSG writes the SettingGroup
 func (c *Client) WriteSG(ld, ln, objectRef string, fc FC, actSG int, value interface{}) error {
 	// Set active setting group
 	if err := c.Write(fmt.Sprintf(ActDA, ld, ln), SP, actSG); err != nil {
@@ -45,13 +45,13 @@ func (c *Client) WriteSG(ld, ln, objectRef string, fc FC, actSG int, value inter
 	return nil
 }
 
-// GetSG 获取SettingGroup
+// GetSG gets the SettingGroup
 func (c *Client) GetSG(objectRef string) (*SettingGroup, error) {
 	var clientError C.IedClientError
 	cObjectRef, freeCObjectRef := allocCString(objectRef)
 	defer freeCObjectRef()
 
-	// 获取类型
+	// Get type
 	sgcbVarSpec := C.IedConnection_getVariableSpecification(c.conn, &clientError, cObjectRef, C.FunctionalConstraint(SP))
 	if err := GetIedClientError(clientError); err != nil {
 		return nil, err

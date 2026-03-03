@@ -73,7 +73,7 @@ func CreateModelFromConfigFileEx(filepath string) (*IedModel, error) {
 		}
 	}
 	cFilepath, freeCFilepath := allocCString(filepath)
-	// 释放内存
+	// Free memory
 	defer freeCFilepath()
 	model := &IedModel{
 		Model: C.ConfigFileParser_createModelFromConfigFileEx(cFilepath),

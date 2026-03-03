@@ -32,7 +32,7 @@ type (
 
 	GooseSubscriber struct {
 		noCopy     struct{}
-		Conf       SubscriberConf // 网卡名称
+		Conf       SubscriberConf // Network interface name
 		subscriber *C.struct_sGooseSubscriber
 		HandlerID  GooseCallbackHandlerID
 	}

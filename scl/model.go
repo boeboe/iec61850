@@ -139,7 +139,7 @@ type LogicalDevice struct {
 	LNodes []*LogicalNode `xml:"LN"`
 
 	// custom
-	LogicalNodes []*LogicalNode // 将LN0、LN合并到一个数组中
+	LogicalNodes []*LogicalNode // LN0 and LN merged into one array
 }
 
 type LogicalNode struct {
@@ -309,7 +309,7 @@ type DataTypeTemplates struct {
 	DataObjectTypes    []*DataObjectType    `xml:"DOType"`
 	DataAttributeTypes []*DataAttributeType `xml:"DAType"`
 	EnumTypes          []*EnumerationType   `xml:"EnumType"`
-	TypeDeclarations   []SclType            // 将LNodeType、DOType、DAType、EnumType合并到一个数组中
+	TypeDeclarations   []SclType            // LNodeType, DOType, DAType, EnumType merged into one array
 }
 
 type sclType struct {

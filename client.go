@@ -92,12 +92,12 @@ type LastApplError struct {
 	AddCause int
 }
 
-// Settings 连接配置
+// Settings holds connection configuration.
 type Settings struct {
 	Host           string
 	Port           int
-	ConnectTimeout uint // 连接超时配置，单位：毫秒
-	RequestTimeout uint // 请求超时配置，单位：毫秒
+	ConnectTimeout uint // Connect timeout in milliseconds
+	RequestTimeout uint // Request timeout in milliseconds
 }
 
 func NewSettings() Settings {
@@ -117,7 +117,7 @@ func NewClientWithDefaultSettings() (*Client, error) {
 	return newClient(NewSettings(), nil)
 }
 
-// NewClient 创建客户端实例
+// NewClient creates a client instance.
 func NewClient(settings Settings) (*Client, error) {
 	return newClient(settings, nil)
 }
@@ -165,7 +165,7 @@ func newClient(settings Settings, tlsConfig *TLSConfig) (*Client, error) {
 	return client, nil
 }
 
-// Write 写单个属性值，不支持Structure
+// Write writes a single attribute value; does not support Structure.
 func (c *Client) Write(objectRef string, fc FC, value interface{}) error {
 	mmsType, err := c.GetVariableSpecType(objectRef, fc)
 	if err != nil {
@@ -190,7 +190,7 @@ func (c *Client) Write(objectRef string, fc FC, value interface{}) error {
 	return GetIedClientError(clientError)
 }
 
-// ReadBool 读取bool类型值
+// ReadBool reads a bool value.
 func (c *Client) ReadBool(objectRef string, fc FC) (bool, error) {
 	cObjectRef, freeCObjectRef := allocCString(objectRef)
 	defer freeCObjectRef()
@@ -203,7 +203,7 @@ func (c *Client) ReadBool(objectRef string, fc FC) (bool, error) {
 	return bool(value), nil
 }
 
-// ReadInt32 读取int32类型值
+// ReadInt32 reads an int32 value.
 func (c *Client) ReadInt32(objectRef string, fc FC) (int32, error) {
 	cObjectRef, freeCObjectRef := allocCString(objectRef)
 	defer freeCObjectRef()
@@ -216,7 +216,7 @@ func (c *Client) ReadInt32(objectRef string, fc FC) (int32, error) {
 	return int32(value), nil
 }
 
-// ReadInt64 读取int64类型值
+// ReadInt64 reads an int64 value.
 func (c *Client) ReadInt64(objectRef string, fc FC) (int64, error) {
 	cObjectRef, freeCObjectRef := allocCString(objectRef)
 	defer freeCObjectRef()
@@ -229,7 +229,7 @@ func (c *Client) ReadInt64(objectRef string, fc FC) (int64, error) {
 	return int64(value), nil
 }
 
-// ReadUint32 读取uint32类型值
+// ReadUint32 reads a uint32 value.
 func (c *Client) ReadUint32(objectRef string, fc FC) (uint32, error) {
 	cObjectRef, freeCObjectRef := allocCString(objectRef)
 	defer freeCObjectRef()
@@ -278,7 +278,7 @@ func (c *Client) ReadUint16(objectRef string, fc FC) (uint16, error) {
 	return uint16(value), nil
 }
 
-// ReadFloat 读取float类型值
+// ReadFloat reads a float value.
 func (c *Client) ReadFloat(objectRef string, fc FC) (float32, error) {
 	cObjectRef, freeCObjectRef := allocCString(objectRef)
 	defer freeCObjectRef()
@@ -288,11 +288,11 @@ func (c *Client) ReadFloat(objectRef string, fc FC) (float32, error) {
 	if err := GetIedClientError(clientError); err != nil {
 		return 0, err
 	}
-	//源码返回值是C的float，4byte，所以应返回float32，否则会出现其他问题
+	// C API returns 4-byte float; use float32 to avoid type issues.
 	return float32(value), nil
 }
 
-// ReadString 读取string类型值
+// ReadString reads a string value.
 func (c *Client) ReadString(objectRef string, fc FC) (string, error) {
 	cObjectRef, freeCObjectRef := allocCString(objectRef)
 	defer freeCObjectRef()
@@ -406,7 +406,7 @@ func (c *Client) ReadBitString(objectRef string, fc FC) ([]byte, error) {
 	return result, nil
 }
 
-// Read 读取属性数据
+// Read reads attribute data.
 func (c *Client) Read(objectRef string, fc FC) (interface{}, error) {
 	var clientError C.IedClientError
 	cObjectRef, freeCObjectRef := allocCString(objectRef)
@@ -422,7 +422,7 @@ func (c *Client) Read(objectRef string, fc FC) (interface{}, error) {
 	return toGoValue(mmsValue, mmsType)
 }
 
-// ReadDataSet 读取DataSet
+// ReadDataSet reads the data set.
 func (c *Client) ReadDataSet(objectRef string) ([]*MmsValue, error) {
 	cObjectRef, freeCObjectRef := allocCString(objectRef)
 	defer freeCObjectRef()
@@ -435,7 +435,7 @@ func (c *Client) ReadDataSet(objectRef string) ([]*MmsValue, error) {
 	defer C.ClientDataSet_destroy(dataSet)
 
 	dataSetValues := C.ClientDataSet_getValues(dataSet)
-	// 长度
+	// Length
 	dataSetSize := int(C.ClientDataSet_getDataSetSize(dataSet))
 	mmsValues := make([]*MmsValue, dataSetSize)
 	for i := 0; i < dataSetSize; i++ {
@@ -455,7 +455,7 @@ func (c *Client) ReadDataSet(objectRef string) ([]*MmsValue, error) {
 	return mmsValues, nil
 }
 
-// Close 关闭连接
+// Close closes the connection.
 func (c *Client) Close() {
 	if c.conn != nil && c.connected.CompareAndSwap(true, false) {
 		C.IedConnection_destroy(c.conn)
@@ -604,13 +604,13 @@ func (c *Client) GetFile(fileName string) ([]byte, error) {
 	return fileData, nil
 }
 
-// GetVariableSpecType 获取类型规格
+// GetVariableSpecType returns the variable specification type.
 func (c *Client) GetVariableSpecType(objectReference string, fc FC) (MmsType, error) {
 	var clientError C.IedClientError
 	cObjectRef, freeCObjectRef := allocCString(objectReference)
 	defer freeCObjectRef()
 
-	// 获取类型
+	// Get type
 	spec := C.IedConnection_getVariableSpecification(c.conn, &clientError, cObjectRef, C.FunctionalConstraint(fc))
 	if err := GetIedClientError(clientError); err != nil {
 		return 0, err
@@ -652,7 +652,7 @@ func (c *Client) getSubElementValue(sgcbVal *C.MmsValue, sgcbVarSpec *C.MmsVaria
 	return toGoValue(mmsValue, MmsType(C.MmsValue_getType(mmsValue)))
 }
 
-// connect 建立连接
+// connect establishes the connection.
 func (c *Client) connect(settings Settings, tlsConfig *TLSConfig) error {
 	var conn C.IedConnection
 
@@ -671,7 +671,7 @@ func (c *Client) connect(settings Settings, tlsConfig *TLSConfig) error {
 	C.IedConnection_setConnectTimeout(conn, C.uint(settings.ConnectTimeout))
 	C.IedConnection_setRequestTimeout(conn, C.uint(settings.RequestTimeout))
 	host, freeHost := allocCString(settings.Host)
-	// 释放内存
+	// Free memory
 	defer freeHost()
 
 	var clientError C.IedClientError

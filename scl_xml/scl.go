@@ -151,13 +151,13 @@ type DOI struct {
 type DAI struct {
 	Name string `xml:"name,attr"`
 	Val  Val    `xml:"Val"`
-	SDI  []SDI  `xml:"SDI"` // 新增
+	SDI  []SDI  `xml:"SDI"` // Added
 }
 
 type SDI struct {
 	Name string `xml:"name,attr"`
 	DAI  []DAI  `xml:"DAI"`
-	SDI  []SDI  `xml:"SDI"` // 递归地包含SDI
+	SDI  []SDI  `xml:"SDI"` // Recursively contains SDI
 }
 
 type Val struct {
@@ -361,7 +361,7 @@ func getIndentation(depth int) string {
 
 func GetSCL(path string) (SCL, error) {
 	var scl SCL
-	// 打开并读取ICD文件
+	// Open and read ICD file
 	xmlFile, err := os.Open(path)
 	if err != nil {
 		fmt.Println("Error opening file:", err)
